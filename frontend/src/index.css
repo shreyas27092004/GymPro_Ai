@@ -1,15 +1,65 @@
+@import '@fontsource-variable/plus-jakarta-sans/index.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: 'Plus Jakarta Sans Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   line-height: 1.5;
   font-weight: 400;
+
+  --color-base: #F8FAFC;
+  --color-surface: #FFFFFF;
+  --color-surface-raised: #F1F5F9;
+  --color-text-primary: #0F172A;
+  --color-text-muted: #64748B;
+  --color-accent: #059669;
+  --color-accent-hover: #047857;
+  --color-accent-subtle: #D1FAE5;
+  --color-danger: #DC2626;
+  --color-danger-subtle: #FEE2E2;
+  --color-border: #E2E8F0;
+}
+
+.dark {
+  --color-base: #090D16;
+  --color-surface: #111827;
+  --color-surface-raised: #1E293B;
+  --color-text-primary: #F8FAFC;
+  --color-text-muted: #94A3B8;
+  --color-accent: #10B981;
+  --color-accent-hover: #059669;
+  --color-accent-subtle: #064E3B;
+  --color-danger: #EF4444;
+  --color-danger-subtle: #450A0A;
+  --color-border: #1E293B;
 }
 
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  background-color: var(--color-base);
+  color: var(--color-text-primary);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Accessibility: Visible focus outline */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

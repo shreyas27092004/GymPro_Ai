@@ -160,29 +160,29 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({ onOpenCoach }) => {
   const pendingTrainersCount = trainerRequests.filter((r: any) => r.status === 'PENDING').length;
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-slate-50 dark:bg-slate-950 py-8 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-[calc(100vh-4rem)] bg-base text-text-primary py-8 px-4 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl space-y-8">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-text-primary">
                 Gym Governance & Administration
               </h1>
               {me?.cooling_off_active && (
-                <span className="rounded-full bg-amber-100 dark:bg-amber-950 px-2.5 py-0.5 text-xs font-bold text-amber-800 dark:text-amber-300">
+                <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-bold text-amber-600 dark:text-amber-400">
                   Cooling-off Active (24h)
                 </span>
               )}
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            <p className="text-xs text-text-muted mt-1">
               Metric catalog views, trainer request approvals queue, HMAC security controls, and issue triage.
             </p>
           </div>
 
           <button
             onClick={onOpenCoach}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-xs font-semibold text-white shadow-sm transition"
+            className="inline-flex items-center gap-1.5 min-h-[44px] rounded-xl bg-accent hover:bg-accent-hover px-4 py-2 text-xs font-semibold text-white shadow-sm transition"
           >
             <Sparkles className="h-4 w-4" />
             <span>Admin Copilot</span>
@@ -193,17 +193,17 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({ onOpenCoach }) => {
           <div
             className={`flex items-center justify-between rounded-xl p-3 text-xs font-medium ${
               statusToast.type === 'success'
-                ? 'bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
-                : 'bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300'
+                ? 'bg-accent/10 border border-accent/20 text-accent'
+                : 'bg-danger/10 border border-danger/20 text-danger'
             }`}
           >
             <span>{statusToast.msg}</span>
-            <button onClick={() => setStatusToast(null)} className="font-bold">&times;</button>
+            <button onClick={() => setStatusToast(null)} className="font-bold min-h-[44px] min-w-[44px]">&times;</button>
           </div>
         )}
 
         {/* Tab Controls */}
-        <div className="flex flex-wrap gap-2 border-b border-slate-200 dark:border-slate-800 pb-2">
+        <div className="flex flex-wrap gap-2 border-b border-border pb-2">
           {[
             { id: 'kpis', label: 'Metric Catalog & KPIs' },
             {
@@ -212,7 +212,7 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({ onOpenCoach }) => {
                 <span className="flex items-center gap-1.5">
                   Approvals Queue
                   {pendingTrainersCount > 0 && (
-                    <span className="rounded-full bg-red-500 px-1.5 py-0.2 text-[10px] font-bold text-white">
+                    <span className="rounded-full bg-danger px-1.5 py-0.2 text-[10px] font-bold text-white">
                       {pendingTrainersCount}
                     </span>
                   )}
@@ -226,10 +226,10 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({ onOpenCoach }) => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`rounded-xl px-4 py-2 text-xs font-semibold transition ${
+              className={`min-h-[44px] rounded-xl px-4 py-2 text-xs font-semibold transition ${
                 activeTab === tab.id
-                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  ? 'bg-text-primary text-base shadow-sm'
+                  : 'text-text-muted hover:bg-surface-raised hover:text-text-primary'
               }`}
             >
               {tab.label}
@@ -241,56 +241,56 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({ onOpenCoach }) => {
         {activeTab === 'kpis' && (
           <div className="space-y-6">
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
                   Monthly Recurring Revenue (MRR)
                 </span>
-                <p className="text-2xl font-black text-slate-900 dark:text-white mt-2">
+                <p className="text-2xl font-black text-text-primary mt-2">
                   ₹{kpiData?.mrr?.toLocaleString() || '284,858'}
                 </p>
-                <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold mt-1">
+                <p className="text-[10px] text-accent font-semibold mt-1">
                   +12.4% vs last month
                 </p>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
                   Class Occupancy Rate
                 </span>
-                <p className="text-2xl font-black text-slate-900 dark:text-white mt-2">
+                <p className="text-2xl font-black text-text-primary mt-2">
                   {kpiData?.occupancy_rate || 68.4}%
                 </p>
-                <p className="text-[10px] text-slate-400 mt-1">Target: &gt;65%</p>
+                <p className="text-[10px] text-text-muted mt-1">Target: &gt;65%</p>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
                   Trial Conversion
                 </span>
-                <p className="text-2xl font-black text-slate-900 dark:text-white mt-2">
+                <p className="text-2xl font-black text-text-primary mt-2">
                   {kpiData?.trials_converted || 74.2}%
                 </p>
-                <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold mt-1">
+                <p className="text-[10px] text-accent font-semibold mt-1">
                   High conversion health
                 </p>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
                   No-Show Rate
                 </span>
-                <p className="text-2xl font-black text-slate-900 dark:text-white mt-2">
+                <p className="text-2xl font-black text-text-primary mt-2">
                   {kpiData?.no_show_rate || 4.8}%
                 </p>
-                <p className="text-[10px] text-slate-400 mt-1">Below 5% threshold</p>
+                <p className="text-[10px] text-text-muted mt-1">Below 5% threshold</p>
               </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm">
-              <h2 className="text-base font-bold text-slate-900 dark:text-white mb-2">
+            <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+              <h2 className="text-base font-bold text-text-primary mb-2">
                 Metric Catalog Invariants (Spec 3.2 & Decision P7)
               </h2>
-              <p className="text-xs text-slate-600 dark:text-slate-400">
+              <p className="text-xs text-text-muted">
                 All business intelligence metrics are computed from verified database views (`v_metrics`) with k-anonymity floors. Direct SQL execution and per-member attendance extraction are strictly barred across all agent copilots.
               </p>
             </div>
@@ -317,19 +317,19 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({ onOpenCoach }) => {
               </div>
 
               {trainerRequests.length > 0 ? (
-                <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                <div className="divide-y divide-border">
                   {trainerRequests.map((req: any) => (
                     <div key={req.request_id || req.id} className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                       <div>
                         <div className="flex items-center gap-2">
-                          <p className="text-sm font-bold text-slate-900 dark:text-white">
+                          <p className="text-sm font-bold text-text-primary">
                             {req.full_name || 'Trainer Applicant'}
                           </p>
-                          <span className="rounded bg-slate-100 dark:bg-slate-800 px-2 py-0.2 text-[10px] font-mono">
+                          <span className="rounded bg-surface-raised px-2 py-0.5 text-[10px] font-mono text-text-muted">
                             {req.email}
                           </span>
                         </div>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                        <p className="text-xs text-text-muted mt-1">
                           Specializations: {req.specializations?.join(', ') || 'STRENGTH'} &bull; Certs: {req.certifications?.join(', ') || 'CSCS'}
                         </p>
                       </div>
@@ -343,7 +343,7 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({ onOpenCoach }) => {
                             })
                           }
                           disabled={trainerDecisionMutation.isPending || me?.cooling_off_active}
-                          className="rounded-lg bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white transition disabled:opacity-50"
+                          className="min-h-[40px] rounded-lg bg-accent hover:bg-accent-hover px-4 py-1.5 text-xs font-semibold text-white transition disabled:opacity-50"
                         >
                           Approve
                         </button>
@@ -357,7 +357,7 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({ onOpenCoach }) => {
                             })
                           }
                           disabled={trainerDecisionMutation.isPending || me?.cooling_off_active}
-                          className="rounded-lg border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/40 px-3 py-1.5 text-xs font-semibold text-red-700 dark:text-red-300 transition disabled:opacity-50"
+                          className="min-h-[40px] rounded-lg border border-danger/30 bg-danger/10 px-4 py-1.5 text-xs font-semibold text-danger hover:bg-danger/20 transition disabled:opacity-50"
                         >
                           Reject
                         </button>
@@ -366,33 +366,33 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({ onOpenCoach }) => {
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-slate-400 py-4 text-center">No pending trainer applications.</p>
+                <p className="text-xs text-text-muted py-4 text-center">No pending trainer applications.</p>
               )}
             </div>
 
             {/* Pending Admin Requests & Revocation */}
-            <div className="rounded-2xl border border-purple-200 dark:border-purple-900/50 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4">
+            <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm space-y-4">
               <div>
                 <div className="flex items-center gap-2">
-                  <ShieldAlert className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                  <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                  <ShieldAlert className="h-5 w-5 text-accent" />
+                  <h2 className="text-base font-bold text-text-primary">
                     Pending Admin Requests & Revocation
                   </h2>
                 </div>
-                <p className="text-xs text-purple-800 dark:text-purple-300 mt-1">
+                <p className="text-xs text-accent mt-1">
                   Security Invariant: No approve endpoint exists! Admin activation occurs solely via one-time HMAC code. Administrators may only reject or revoke requests.
                 </p>
               </div>
 
               {adminRequests.length > 0 ? (
-                <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                <div className="divide-y divide-border">
                   {adminRequests.map((areq: any) => (
                     <div key={areq.request_id || areq.id} className="py-3 flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-bold text-slate-900 dark:text-white">
+                        <p className="text-sm font-bold text-text-primary">
                           {areq.full_name || areq.email}
                         </p>
-                        <p className="text-[11px] text-slate-500">
+                        <p className="text-[11px] text-text-muted">
                           Requested: {areq.created_at ? new Date(areq.created_at).toLocaleString() : 'Recent'} &bull; Status: {areq.status}
                         </p>
                       </div>
@@ -400,7 +400,7 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({ onOpenCoach }) => {
                       <button
                         onClick={() => rejectAdminMutation.mutate(areq.request_id || areq.id)}
                         disabled={rejectAdminMutation.isPending}
-                        className="rounded-lg border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950 px-3 py-1.5 text-xs font-semibold text-red-700 dark:text-red-300 transition"
+                        className="min-h-[40px] rounded-lg border border-danger/30 bg-danger/10 px-3 py-1.5 text-xs font-semibold text-danger hover:bg-danger/20 transition"
                       >
                         Reject / Revoke
                       </button>
@@ -408,7 +408,7 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({ onOpenCoach }) => {
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-slate-400 py-4 text-center">No pending admin authorization requests.</p>
+                <p className="text-xs text-text-muted py-4 text-center">No pending admin authorization requests.</p>
               )}
             </div>
           </div>
@@ -416,13 +416,13 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({ onOpenCoach }) => {
 
         {/* Tab 3: Issue Triage Board */}
         {activeTab === 'triage' && (
-          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4">
+          <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                <h2 className="text-base font-bold text-text-primary">
                   Issue Reports Triage Board
                 </h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
+                <p className="text-xs text-text-muted">
                   Member reports categorized with severity ratings. Reporter identity is masked.
                 </p>
               </div>
@@ -433,39 +433,39 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({ onOpenCoach }) => {
                 {issues.map((iss: any) => (
                   <div
                     key={iss.issue_id || iss.id}
-                    className="rounded-xl border border-slate-200 dark:border-slate-800 p-4 space-y-3"
+                    className="rounded-xl border border-border bg-surface p-4 space-y-3"
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span
                           className={`rounded px-2 py-0.5 text-[10px] font-bold ${
                             iss.severity === 'HIGH' || iss.severity === 'CRITICAL'
-                              ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'
+                              ? 'bg-danger/15 text-danger'
                               : iss.severity === 'MEDIUM'
-                              ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                              : 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300'
+                              ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                              : 'bg-surface-raised text-text-primary'
                           }`}
                         >
                           {iss.severity} Severity
                         </span>
-                        <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                        <span className="text-xs font-semibold text-text-primary">
                           {iss.category}
                         </span>
-                        <span className="text-[11px] text-slate-400">
+                        <span className="text-[11px] text-text-muted">
                           by {iss.reporter || 'a member'}
                         </span>
                       </div>
 
-                      <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                      <span className="text-xs font-semibold text-text-muted">
                         Status: {iss.status}
                       </span>
                     </div>
 
-                    <p className="text-xs text-slate-700 dark:text-slate-300">
+                    <p className="text-xs text-text-primary">
                       {iss.summary || iss.ai_summary || iss.user_words}
                     </p>
 
-                    <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border">
                       <button
                         onClick={() =>
                           triageIssueMutation.mutate({
@@ -474,7 +474,7 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({ onOpenCoach }) => {
                             adminAction: 'WARN_TRAINER',
                           })
                         }
-                        className="rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-1 text-xs font-medium hover:bg-slate-50 dark:hover:bg-slate-800"
+                        className="min-h-[40px] rounded-lg border border-border px-3 py-1 text-xs font-medium text-text-primary hover:bg-surface-raised transition"
                       >
                         Warn Trainer
                       </button>
@@ -487,7 +487,7 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({ onOpenCoach }) => {
                             adminAction: 'CONTACT_USER',
                           })
                         }
-                        className="rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-1 text-xs font-medium hover:bg-slate-50 dark:hover:bg-slate-800"
+                        className="min-h-[40px] rounded-lg border border-border px-3 py-1 text-xs font-medium text-text-primary hover:bg-surface-raised transition"
                       >
                         Contact User
                       </button>
@@ -500,7 +500,7 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({ onOpenCoach }) => {
                             adminAction: 'RESOLVED',
                           })
                         }
-                        className="rounded-lg bg-emerald-600 hover:bg-emerald-700 px-3 py-1 text-xs font-semibold text-white"
+                        className="min-h-[40px] rounded-lg bg-accent hover:bg-accent-hover px-3 py-1 text-xs font-semibold text-white transition"
                       >
                         Close Ticket
                       </button>
@@ -509,19 +509,19 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({ onOpenCoach }) => {
                 ))}
               </div>
             ) : (
-              <p className="text-xs text-slate-400 py-4 text-center">No open issue reports.</p>
+              <p className="text-xs text-text-muted py-4 text-center">No open issue reports.</p>
             )}
           </div>
         )}
 
         {/* Tab 4: Staff Management (Trainer Invites Only) */}
         {activeTab === 'staff' && (
-          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-6">
+          <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm space-y-6">
             <div>
-              <h2 className="text-base font-bold text-slate-900 dark:text-white">
+              <h2 className="text-base font-bold text-text-primary">
                 Invite Staff Members
               </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <p className="text-xs text-text-muted">
                 Decision 16: Trainer invites only. Admin invites are disabled in v1.
               </p>
             </div>
@@ -534,7 +534,7 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({ onOpenCoach }) => {
               className="space-y-4 max-w-md"
             >
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-xs font-semibold text-text-primary mb-1">
                   Trainer Email
                 </label>
                 <input
@@ -543,26 +543,26 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({ onOpenCoach }) => {
                   value={inviteEmail}
                   onChange={(e) => setInviteEmail(e.target.value)}
                   placeholder="newtrainer@example.com"
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 text-xs text-slate-900 dark:text-white"
+                  className="w-full rounded-xl border border-border bg-surface-raised p-2.5 text-xs text-text-primary min-h-[44px]"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-xs font-semibold text-text-primary mb-1">
                   Invited Role
                 </label>
                 <input
                   type="text"
                   disabled
                   value="TRAINER (Admin invites disabled per security policy)"
-                  className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 p-2.5 text-xs text-slate-500 cursor-not-allowed"
+                  className="w-full rounded-xl border border-border bg-surface-raised p-2.5 text-xs text-text-muted cursor-not-allowed min-h-[44px]"
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={inviteStaffMutation.isPending || me?.cooling_off_active}
-                className="flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 px-5 py-2.5 text-xs font-semibold text-white shadow-sm transition disabled:opacity-50"
+                className="flex items-center gap-1.5 min-h-[44px] rounded-xl bg-accent hover:bg-accent-hover px-5 py-2.5 text-xs font-semibold text-white shadow-sm transition disabled:opacity-50"
               >
                 <UserPlus className="h-4 w-4" />
                 <span>{inviteStaffMutation.isPending ? 'Sending...' : 'Send Trainer Invitation'}</span>
@@ -573,25 +573,25 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({ onOpenCoach }) => {
 
         {/* Tab 5: Broadcast Composer */}
         {activeTab === 'broadcast' && (
-          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-6">
+          <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm space-y-6">
             <div>
-              <h2 className="text-base font-bold text-slate-900 dark:text-white">
+              <h2 className="text-base font-bold text-text-primary">
                 Draft Member Broadcast Announcement
               </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <p className="text-xs text-text-muted">
                 Non-essential notifications honor marketing unsubscribes. Sending executes through transactional outbox relay.
               </p>
             </div>
 
             <div className="space-y-4 max-w-xl">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-xs font-semibold text-text-primary mb-1">
                   Target Audience
                 </label>
                 <select
                   value={broadcastAudience}
                   onChange={(e) => setBroadcastAudience(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 text-xs text-slate-900 dark:text-white"
+                  className="w-full rounded-xl border border-border bg-surface-raised p-2.5 text-xs text-text-primary min-h-[44px]"
                 >
                   <option value="ALL">All Active Members & Trainers (~150 recipients)</option>
                   <option value="MEMBERS">Members Only (~142 recipients)</option>
@@ -600,33 +600,33 @@ export const AdminConsole: React.FC<AdminConsoleProps> = ({ onOpenCoach }) => {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-xs font-semibold text-text-primary mb-1">
                   Subject Line
                 </label>
                 <input
                   type="text"
                   value={broadcastSubject}
                   onChange={(e) => setBroadcastSubject(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 text-xs text-slate-900 dark:text-white"
+                  className="w-full rounded-xl border border-border bg-surface-raised p-2.5 text-xs text-text-primary min-h-[44px]"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-xs font-semibold text-text-primary mb-1">
                   Message Body
                 </label>
                 <textarea
                   rows={4}
                   value={broadcastBody}
                   onChange={(e) => setBroadcastBody(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 text-xs text-slate-900 dark:text-white"
+                  className="w-full rounded-xl border border-border bg-surface-raised p-3 text-xs text-text-primary"
                 />
               </div>
 
               <div className="flex items-center gap-3">
                 <button
                   onClick={onOpenCoach}
-                  className="flex items-center gap-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 px-4 py-2 text-xs font-semibold text-white shadow-sm transition"
+                  className="flex items-center gap-1.5 min-h-[44px] rounded-xl bg-accent hover:bg-accent-hover px-4 py-2 text-xs font-semibold text-white shadow-sm transition"
                 >
                   <Sparkles className="h-4 w-4" />
                   <span>Draft & Preview with AI</span>

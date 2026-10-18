@@ -140,16 +140,16 @@ export const MembershipPage: React.FC = () => {
   const currentPlanCode = currentMembership?.plan_code || currentMembership?.plan || 'NONE';
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-slate-50 dark:bg-slate-950 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-[calc(100vh-4rem)] bg-base text-text-primary py-12 px-4 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl space-y-10">
         <div className="text-center space-y-2 max-w-2xl mx-auto">
-          <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+          <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-accent/10 text-accent">
             <CreditCard className="h-5 w-5" />
           </div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+          <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">
             Membership Plans & Upgrades
           </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
+          <p className="text-xs text-text-muted">
             Transparent pricing with prorated billing. All payments are secured via Razorpay.
           </p>
         </div>
@@ -158,41 +158,41 @@ export const MembershipPage: React.FC = () => {
           <div
             className={`flex items-center gap-2.5 rounded-xl p-4 text-xs font-medium max-w-xl mx-auto ${
               statusMsg.type === 'success'
-                ? 'bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
-                : 'bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300'
+                ? 'bg-accent/10 border border-accent/20 text-accent'
+                : 'bg-danger/10 border border-danger/20 text-danger'
             }`}
           >
             {statusMsg.type === 'success' ? (
-              <CheckCircle className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              <CheckCircle className="h-4 w-4 shrink-0 text-accent" />
             ) : (
-              <AlertCircle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+              <AlertCircle className="h-4 w-4 shrink-0 text-danger" />
             )}
             <span>{statusMsg.text}</span>
           </div>
         )}
 
         {/* Current Plan Banner */}
-        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent/10 text-accent">
               <Zap className="h-6 w-6" />
             </div>
             <div>
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
                 Active Tier
               </span>
-              <h3 className="text-xl font-bold text-slate-900 dark:text-white">
+              <h3 className="text-xl font-bold text-text-primary">
                 {currentPlanCode !== 'NONE' ? `${currentPlanCode} Membership` : 'Free Trial / Non-Member'}
               </h3>
             </div>
           </div>
 
           <div className="text-right">
-            <span className="rounded-full bg-emerald-100 dark:bg-emerald-950 px-3 py-1 text-xs font-semibold text-emerald-800 dark:text-emerald-300">
+            <span className="rounded-full bg-accent/15 px-3 py-1 text-xs font-semibold text-accent">
               {currentMembership?.status || 'ACTIVE'}
             </span>
             {currentMembership?.end_date && (
-              <p className="text-[11px] text-slate-400 mt-1">Renews {currentMembership.end_date}</p>
+              <p className="text-[11px] text-text-muted mt-1">Renews {currentMembership.end_date}</p>
             )}
           </div>
         </div>
@@ -206,48 +206,48 @@ export const MembershipPage: React.FC = () => {
                 key={p.code}
                 className={`rounded-2xl border p-6 flex flex-col justify-between transition shadow-sm ${
                   isCurrent
-                    ? 'border-emerald-500 bg-emerald-50/20 dark:bg-emerald-950/10 ring-2 ring-emerald-500/20'
-                    : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700'
+                    ? 'border-accent bg-accent/5 ring-2 ring-accent/20'
+                    : 'border-border bg-surface hover:border-border/80'
                 }`}
               >
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">{p.name || p.code}</h3>
+                    <h3 className="text-lg font-bold text-text-primary">{p.name || p.code}</h3>
                     {isCurrent && (
-                      <span className="rounded bg-emerald-100 dark:bg-emerald-900/60 px-2 py-0.5 text-[10px] font-bold text-emerald-800 dark:text-emerald-300">
+                      <span className="rounded bg-accent/15 px-2 py-0.5 text-[10px] font-bold text-accent">
                         Current
                       </span>
                     )}
                   </div>
 
                   <div className="mt-3 flex items-baseline gap-1">
-                    <span className="text-3xl font-extrabold text-slate-900 dark:text-white">
+                    <span className="text-3xl font-extrabold text-text-primary">
                       ₹{p.price_monthly}
                     </span>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">/ month</span>
+                    <span className="text-xs text-text-muted">/ month</span>
                   </div>
 
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                  <p className="text-xs text-text-muted mt-2">
                     {p.classes_per_month > 100
                       ? 'Unlimited access to all classes'
                       : `Includes ${p.classes_per_month} classes per monthly cycle`}
                   </p>
 
-                  <ul className="mt-6 space-y-2.5 text-xs text-slate-600 dark:text-slate-300">
+                  <ul className="mt-6 space-y-2.5 text-xs text-text-muted">
                     {(p.perks || []).map((perk: string, i: number) => (
                       <li key={i} className="flex items-center gap-2">
-                        <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
-                        <span>{perk}</span>
+                        <CheckCircle className="h-4 w-4 text-accent shrink-0" />
+                        <span className="text-text-primary">{perk}</span>
                       </li>
                     ))}
                   </ul>
                 </div>
 
-                <div className="mt-8 pt-4 border-t border-slate-100 dark:border-slate-800">
+                <div className="mt-8 pt-4 border-t border-border">
                   {isCurrent ? (
                     <button
                       disabled
-                      className="w-full rounded-xl bg-slate-100 dark:bg-slate-800 py-2.5 text-xs font-semibold text-slate-500 dark:text-slate-400 cursor-default"
+                      className="w-full min-h-[44px] rounded-xl bg-surface-raised py-2.5 text-xs font-semibold text-text-muted cursor-default"
                     >
                       Active Plan
                     </button>
@@ -255,7 +255,7 @@ export const MembershipPage: React.FC = () => {
                     <button
                       disabled={upgrading}
                       onClick={() => handleUpgradeClick(p.code)}
-                      className="w-full flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 py-2.5 text-xs font-semibold text-white shadow-sm transition disabled:opacity-50"
+                      className="w-full min-h-[44px] flex items-center justify-center gap-1.5 rounded-xl bg-accent hover:bg-accent-hover py-2.5 text-xs font-semibold text-white shadow-sm transition disabled:opacity-50"
                     >
                       <span>{upgrading && selectedPlan === p.code ? 'Processing...' : `Upgrade to ${p.code}`}</span>
                       <ArrowRight className="h-3.5 w-3.5" />
@@ -268,13 +268,13 @@ export const MembershipPage: React.FC = () => {
         </div>
 
         {/* Downgrade Policy Notice */}
-        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 p-4 text-xs text-slate-600 dark:text-slate-400 flex items-start gap-3">
-          <HelpCircle className="h-4 w-4 text-slate-500 mt-0.5 shrink-0" />
+        <div className="rounded-xl border border-border bg-surface-raised p-4 text-xs text-text-muted flex items-start gap-3">
+          <HelpCircle className="h-4 w-4 text-text-muted mt-0.5 shrink-0" />
           <div>
-            <p className="font-semibold text-slate-800 dark:text-slate-200">
+            <p className="font-semibold text-text-primary">
               Downgrades Policy (Decision 13)
             </p>
-            <p className="mt-0.5">
+            <p className="mt-0.5 text-text-muted">
               To prevent mid-cycle disruption of class entitlements and booking allocations, plan downgrades are processed exclusively at the end of the current billing cycle by gym staff. Please contact front desk or support if you wish to set your renewal tier.
             </p>
           </div>

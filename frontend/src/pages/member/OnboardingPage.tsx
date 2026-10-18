@@ -72,11 +72,11 @@ export const OnboardingPage: React.FC = () => {
   });
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-slate-50 dark:bg-slate-950 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-[calc(100vh-4rem)] bg-base text-text-primary py-12 px-4 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-2xl">
         {/* Progress Tracker */}
         <div className="mb-8">
-          <div className="flex items-center justify-between text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">
+          <div className="flex items-center justify-between text-xs font-semibold text-text-muted mb-2">
             <span>Step {step} of 4</span>
             <span>
               {step === 1 && 'Basics & Body Metrics'}
@@ -85,35 +85,35 @@ export const OnboardingPage: React.FC = () => {
               {step === 4 && 'Health Consent & Confirmation'}
             </span>
           </div>
-          <div className="h-2 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+          <div className="h-2 w-full rounded-full bg-surface-raised overflow-hidden">
             <div
-              className="h-full bg-emerald-500 transition-all duration-300"
+              className="h-full bg-accent transition-all duration-300"
               style={{ width: `${(step / 4) * 100}%` }}
             />
           </div>
         </div>
 
         {/* Card Content */}
-        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 shadow-sm">
+        <div className="rounded-2xl border border-border bg-surface p-8 shadow-sm">
           {step === 1 && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Tell us about yourself</h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
+                <h2 className="text-2xl font-bold text-text-primary">Tell us about yourself</h2>
+                <p className="text-xs text-text-muted">
                   These metrics calibrate deterministic BMR, TDEE, and hydration calculators.
                 </p>
               </div>
 
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-text-primary mb-1">
                     Date of Birth
                   </label>
                   <input
                     type="date"
                     value={dateOfBirth}
                     onChange={(e) => setDateOfBirth(e.target.value)}
-                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2.5 text-sm text-slate-900 dark:text-white"
+                    className="w-full min-h-[44px] rounded-xl border border-border bg-surface-raised px-3.5 py-2.5 text-sm text-text-primary focus:border-accent focus:outline-none"
                   />
                 </div>
 
@@ -322,44 +322,44 @@ export const OnboardingPage: React.FC = () => {
           {step === 4 && (
             <div className="space-y-6">
               <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent/10 text-accent">
                   <ShieldCheck className="h-6 w-6" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Health-Data Consent</h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                  <h2 className="text-2xl font-bold text-text-primary">Health-Data Consent</h2>
+                  <p className="text-xs text-text-muted">
                     GDPR and Health Information Privacy Protection
                   </p>
                 </div>
               </div>
 
-              <div className="rounded-xl border border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/50 dark:bg-emerald-950/20 p-5 space-y-3 text-xs text-slate-700 dark:text-slate-300">
-                <p className="font-semibold text-emerald-900 dark:text-emerald-300">
+              <div className="rounded-xl border border-accent/20 bg-accent/5 p-5 space-y-3 text-xs text-text-primary">
+                <p className="font-semibold text-accent">
                   How GymPro AI processes your health data:
                 </p>
-                <ul className="list-disc pl-4 space-y-1 text-slate-600 dark:text-slate-400">
+                <ul className="list-disc pl-4 space-y-1 text-text-muted">
                   <li>Your injuries and allergies are used to protect you from unsafe classes and meals.</li>
                   <li>Trainers and staff never see your medical history or injury notes.</li>
                   <li>You can withdraw consent at any time from your Privacy page.</li>
                   <li>Withdrawing consent immediately deletes your biometric intake profile and clears AI memory.</li>
                 </ul>
 
-                <div className="pt-2 border-t border-emerald-200 dark:border-emerald-900/50 flex items-start gap-3">
+                <div className="pt-2 border-t border-accent/20 flex items-start gap-3">
                   <input
                     type="checkbox"
                     id="consent"
                     checked={healthConsent}
                     onChange={(e) => setHealthConsent(e.target.checked)}
-                    className="h-4 w-4 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500 mt-0.5"
+                    className="h-4 w-4 rounded border-accent text-accent focus:ring-accent mt-0.5"
                   />
-                  <label htmlFor="consent" className="font-medium text-slate-800 dark:text-slate-200">
+                  <label htmlFor="consent" className="font-medium text-text-primary">
                     I grant affirmative consent for GymPro AI to store and process my biometric, injury, and dietary data for personalized coaching.
                   </label>
                 </div>
               </div>
 
               {!healthConsent && (
-                <div className="flex items-center gap-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 p-3 text-xs text-amber-800 dark:text-amber-300">
+                <div className="flex items-center gap-2 rounded-xl bg-amber-500/10 border border-amber-500/20 p-3 text-xs text-amber-600 dark:text-amber-400">
                   <AlertTriangle className="h-4 w-4 shrink-0" />
                   <span>
                     Without health consent, AI coaching will run in generic mode without injury filtering or macro personalization.
@@ -370,12 +370,12 @@ export const OnboardingPage: React.FC = () => {
           )}
 
           {/* Navigation Controls */}
-          <div className="mt-8 flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800">
+          <div className="mt-8 flex items-center justify-between pt-4 border-t border-border">
             {step > 1 ? (
               <button
                 type="button"
                 onClick={() => setStep((s) => s - 1)}
-                className="flex items-center gap-1.5 rounded-xl border border-slate-300 dark:border-slate-700 px-4 py-2.5 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+                className="flex items-center gap-1.5 min-h-[44px] rounded-xl border border-border px-4 py-2.5 text-xs font-semibold text-text-primary hover:bg-surface-raised transition"
               >
                 <ArrowLeft className="h-4 w-4" /> Back
               </button>
@@ -387,7 +387,7 @@ export const OnboardingPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setStep((s) => s + 1)}
-                className="flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-5 py-2.5 text-xs font-semibold text-white shadow-sm transition"
+                className="flex items-center gap-1.5 min-h-[44px] rounded-xl bg-accent hover:bg-accent-hover px-5 py-2.5 text-xs font-semibold text-white shadow-sm transition"
               >
                 Continue <ArrowRight className="h-4 w-4" />
               </button>
@@ -396,7 +396,7 @@ export const OnboardingPage: React.FC = () => {
                 type="button"
                 disabled={saveIntakeMutation.isPending}
                 onClick={() => saveIntakeMutation.mutate()}
-                className="flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-6 py-2.5 text-xs font-semibold text-white shadow-sm transition disabled:opacity-50"
+                className="flex items-center gap-1.5 min-h-[44px] rounded-xl bg-accent hover:bg-accent-hover px-6 py-2.5 text-xs font-semibold text-white shadow-sm transition disabled:opacity-50"
               >
                 {saveIntakeMutation.isPending ? 'Saving...' : 'Complete Onboarding'}
                 <Sparkles className="h-4 w-4" />

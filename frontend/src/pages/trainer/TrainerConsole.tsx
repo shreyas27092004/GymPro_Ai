@@ -156,27 +156,27 @@ export const TrainerConsole: React.FC<TrainerConsoleProps> = ({ onOpenCoach }) =
   });
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-slate-50 dark:bg-slate-950 py-8 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-[calc(100vh-4rem)] bg-base text-text-primary py-8 px-4 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl space-y-8">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-text-primary">
                 Trainer Operations Console
               </h1>
-              <span className="rounded-full bg-blue-100 dark:bg-blue-950 px-2.5 py-0.5 text-xs font-semibold text-blue-800 dark:text-blue-300">
+              <span className="rounded-full bg-accent/15 px-2.5 py-0.5 text-xs font-semibold text-accent">
                 Coach
               </span>
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            <p className="text-xs text-text-muted mt-1">
               Manage your teaching calendar, rosters, recurring series, and review privacy-safe feedback.
             </p>
           </div>
 
           <button
             onClick={onOpenCoach}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-xs font-semibold text-white shadow-sm transition"
+            className="inline-flex items-center gap-1.5 min-h-[44px] rounded-xl bg-accent hover:bg-accent-hover px-4 py-2 text-xs font-semibold text-white shadow-sm transition"
           >
             <Sparkles className="h-4 w-4" />
             <span>Trainer Copilot</span>
@@ -184,14 +184,14 @@ export const TrainerConsole: React.FC<TrainerConsoleProps> = ({ onOpenCoach }) =
         </div>
 
         {statusToast && (
-          <div className="flex items-center justify-between rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 p-3 text-xs text-emerald-800 dark:text-emerald-300">
+          <div className="flex items-center justify-between rounded-xl bg-accent/10 border border-accent/20 p-3 text-xs text-accent">
             <span>{statusToast}</span>
-            <button onClick={() => setStatusToast(null)} className="font-bold">&times;</button>
+            <button onClick={() => setStatusToast(null)} className="font-bold min-h-[44px] min-w-[44px]">&times;</button>
           </div>
         )}
 
         {/* Tab Controls */}
-        <div className="flex space-x-2 border-b border-slate-200 dark:border-slate-800 pb-2">
+        <div className="flex flex-wrap gap-2 border-b border-border pb-2">
           {[
             { id: 'roster', label: 'Class Rosters & Attendance' },
             { id: 'series', label: 'Recurring Series Creator' },
@@ -201,10 +201,10 @@ export const TrainerConsole: React.FC<TrainerConsoleProps> = ({ onOpenCoach }) =
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`rounded-xl px-4 py-2 text-xs font-semibold transition ${
+              className={`min-h-[44px] rounded-xl px-4 py-2 text-xs font-semibold transition ${
                 activeTab === tab.id
-                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  ? 'bg-text-primary text-base shadow-sm'
+                  : 'text-text-muted hover:bg-surface-raised hover:text-text-primary'
               }`}
             >
               {tab.label}
@@ -216,8 +216,8 @@ export const TrainerConsole: React.FC<TrainerConsoleProps> = ({ onOpenCoach }) =
         {activeTab === 'roster' && (
           <div className="grid lg:grid-cols-3 gap-6">
             {/* Class Selection Column */}
-            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4">
-              <h2 className="text-base font-bold text-slate-900 dark:text-white">
+            <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm space-y-4">
+              <h2 className="text-base font-bold text-text-primary">
                 Upcoming Classes
               </h2>
 
@@ -230,15 +230,15 @@ export const TrainerConsole: React.FC<TrainerConsoleProps> = ({ onOpenCoach }) =
                       onClick={() => setSelectedClassId(cls.id)}
                       className={`cursor-pointer rounded-xl border p-3 text-xs transition ${
                         isSelected
-                          ? 'border-emerald-500 bg-emerald-50/30 dark:bg-emerald-950/20'
-                          : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                          ? 'border-accent bg-accent/10'
+                          : 'border-border hover:border-border/80 bg-surface'
                       }`}
                     >
                       <div className="flex items-center justify-between mb-1">
-                        <span className="font-bold text-slate-900 dark:text-white">{cls.title}</span>
-                        <span className="text-[10px] text-slate-400">{cls.booked_count} booked</span>
+                        <span className="font-bold text-text-primary">{cls.title}</span>
+                        <span className="text-[10px] text-text-muted">{cls.booked_count} booked</span>
                       </div>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      <p className="text-[11px] text-text-muted">
                         {new Date(cls.start_time).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
                       </p>
                     </div>
@@ -248,46 +248,46 @@ export const TrainerConsole: React.FC<TrainerConsoleProps> = ({ onOpenCoach }) =
             </div>
 
             {/* Roster Display Column (First Names Only per Spec 3.2 & 10.3) */}
-            <div className="lg:col-span-2 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4">
+            <div className="lg:col-span-2 rounded-2xl border border-border bg-surface p-6 shadow-sm space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                  <h2 className="text-base font-bold text-text-primary">
                     Attendee Roster
                   </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                  <p className="text-xs text-text-muted">
                     Privacy Invariant: Attendee first names only. Medical and contact details are masked.
                   </p>
                 </div>
 
-                <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-3 py-1 text-xs font-semibold text-slate-700 dark:text-slate-300">
+                <span className="rounded-full bg-surface-raised px-3 py-1 text-xs font-semibold text-text-primary">
                   {rosterData?.roster?.length || 0} Registered
                 </span>
               </div>
 
-              <div className="divide-y divide-slate-100 dark:divide-slate-800">
+              <div className="divide-y divide-border">
                 {rosterData?.roster?.map((att: any, i: number) => (
                   <div key={i} className="py-3 flex items-center justify-between">
                     <div className="flex items-center space-x-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-raised text-xs font-bold text-text-primary">
                         {att.first_name?.[0] || 'A'}
                       </div>
                       <div>
-                        <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                        <p className="text-sm font-semibold text-text-primary">
                           {att.first_name}
                         </p>
-                        <p className="text-[11px] text-slate-400">Booking: {att.status}</p>
+                        <p className="text-[11px] text-text-muted">Booking: {att.status}</p>
                       </div>
                     </div>
 
                     <div className="flex items-center space-x-2">
                       <button
-                        className="rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-1 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+                        className="min-h-[40px] rounded-lg border border-border px-3 py-1 text-xs font-medium text-text-muted hover:text-text-primary hover:bg-surface-raised transition"
                         title="Mark Present"
                       >
                         Present
                       </button>
                       <button
-                        className="rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-1 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
+                        className="min-h-[40px] rounded-lg border border-border px-3 py-1 text-xs font-medium text-text-muted hover:text-text-primary hover:bg-surface-raised transition"
                         title="Mark No-Show"
                       >
                         No-Show
@@ -302,37 +302,37 @@ export const TrainerConsole: React.FC<TrainerConsoleProps> = ({ onOpenCoach }) =
 
         {/* Tab 2: Recurring Series Creator with Conflict Flags */}
         {activeTab === 'series' && (
-          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-6">
+          <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm space-y-6">
             <div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+              <h2 className="text-lg font-bold text-text-primary">
                 Recurring Series Generator
               </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <p className="text-xs text-text-muted">
                 Preview all instances across your calendar to automatically flag overlaps, time off, and availability conflicts.
               </p>
             </div>
 
             <div className="grid sm:grid-cols-3 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-xs font-semibold text-text-primary mb-1">
                   Series Title
                 </label>
                 <input
                   type="text"
                   value={seriesTitle}
                   onChange={(e) => setSeriesTitle(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 text-xs text-slate-900 dark:text-white"
+                  className="w-full rounded-xl border border-border bg-surface-raised p-2.5 text-xs text-text-primary min-h-[44px]"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-xs font-semibold text-text-primary mb-1">
                   Category
                 </label>
                 <select
                   value={seriesCategory}
                   onChange={(e) => setSeriesCategory(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 text-xs text-slate-900 dark:text-white"
+                  className="w-full rounded-xl border border-border bg-surface-raised p-2.5 text-xs text-text-primary min-h-[44px]"
                 >
                   <option value="HIIT">HIIT</option>
                   <option value="YOGA">Yoga</option>
@@ -342,43 +342,43 @@ export const TrainerConsole: React.FC<TrainerConsoleProps> = ({ onOpenCoach }) =
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-xs font-semibold text-text-primary mb-1">
                   Capacity
                 </label>
                 <input
                   type="number"
                   value={seriesCapacity}
                   onChange={(e) => setSeriesCapacity(Number(e.target.value))}
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 text-xs text-slate-900 dark:text-white"
+                  className="w-full rounded-xl border border-border bg-surface-raised p-2.5 text-xs text-text-primary min-h-[44px]"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-xs font-semibold text-text-primary mb-1">
                   First Session Start Time
                 </label>
                 <input
                   type="datetime-local"
                   value={seriesStart}
                   onChange={(e) => setSeriesStart(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 text-xs text-slate-900 dark:text-white"
+                  className="w-full rounded-xl border border-border bg-surface-raised p-2.5 text-xs text-text-primary min-h-[44px]"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-xs font-semibold text-text-primary mb-1">
                   Duration (Minutes)
                 </label>
                 <input
                   type="number"
                   value={seriesDuration}
                   onChange={(e) => setSeriesDuration(Number(e.target.value))}
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 text-xs text-slate-900 dark:text-white"
+                  className="w-full rounded-xl border border-border bg-surface-raised p-2.5 text-xs text-text-primary min-h-[44px]"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-xs font-semibold text-text-primary mb-1">
                   Recurring Weeks
                 </label>
                 <input
@@ -387,7 +387,7 @@ export const TrainerConsole: React.FC<TrainerConsoleProps> = ({ onOpenCoach }) =
                   max={12}
                   value={seriesWeeks}
                   onChange={(e) => setSeriesWeeks(Number(e.target.value))}
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 text-xs text-slate-900 dark:text-white"
+                  className="w-full rounded-xl border border-border bg-surface-raised p-2.5 text-xs text-text-primary min-h-[44px]"
                 />
               </div>
             </div>
@@ -396,7 +396,7 @@ export const TrainerConsole: React.FC<TrainerConsoleProps> = ({ onOpenCoach }) =
               <button
                 onClick={() => previewSeriesMutation.mutate()}
                 disabled={previewSeriesMutation.isPending}
-                className="flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 px-5 py-2.5 text-xs font-semibold text-white shadow-sm transition disabled:opacity-50"
+                className="flex items-center gap-1.5 min-h-[44px] rounded-xl bg-accent hover:bg-accent-hover px-5 py-2.5 text-xs font-semibold text-white shadow-sm transition disabled:opacity-50"
               >
                 <span>{previewSeriesMutation.isPending ? 'Checking Conflicts...' : 'Preview Series Instances'}</span>
                 <ChevronRight className="h-4 w-4" />
@@ -405,8 +405,8 @@ export const TrainerConsole: React.FC<TrainerConsoleProps> = ({ onOpenCoach }) =
 
             {/* Preview Results Grid */}
             {previewInstances && (
-              <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-3">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+              <div className="pt-4 border-t border-border space-y-3">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-text-primary">
                   Instance Preview Results ({previewInstances.length} weeks)
                 </h3>
 
@@ -416,16 +416,16 @@ export const TrainerConsole: React.FC<TrainerConsoleProps> = ({ onOpenCoach }) =
                       key={i}
                       className={`rounded-xl border p-3 flex items-center justify-between text-xs ${
                         inst.status === 'OK'
-                          ? 'border-emerald-200 bg-emerald-50/50 dark:border-emerald-900/40 dark:bg-emerald-950/20'
-                          : 'border-amber-200 bg-amber-50/50 dark:border-amber-900/40 dark:bg-amber-950/20'
+                          ? 'border-accent/30 bg-accent/10 text-text-primary'
+                          : 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400'
                       }`}
                     >
                       <div className="space-y-0.5">
-                        <span className="font-semibold text-slate-800 dark:text-slate-200">
+                        <span className="font-semibold text-text-primary">
                           Week {i + 1}: {new Date(inst.start_time).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
                         </span>
                         {inst.conflict_details && (
-                          <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                          <p className="text-[11px] text-amber-600 dark:text-amber-400">
                             {inst.conflict_details}
                           </p>
                         )}
@@ -434,8 +434,8 @@ export const TrainerConsole: React.FC<TrainerConsoleProps> = ({ onOpenCoach }) =
                       <span
                         className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
                           inst.status === 'OK'
-                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/80 dark:text-emerald-300'
-                            : 'bg-amber-100 text-amber-800 dark:bg-amber-900/80 dark:text-amber-300'
+                            ? 'bg-accent/20 text-accent'
+                            : 'bg-amber-500/20 text-amber-600 dark:text-amber-400'
                         }`}
                       >
                         {inst.status}
@@ -447,7 +447,7 @@ export const TrainerConsole: React.FC<TrainerConsoleProps> = ({ onOpenCoach }) =
                 <div className="pt-2 flex justify-end">
                   <button
                     onClick={onOpenCoach}
-                    className="flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-5 py-2 text-xs font-semibold text-white shadow-sm transition"
+                    className="flex items-center gap-1.5 min-h-[44px] rounded-xl bg-accent hover:bg-accent-hover px-5 py-2 text-xs font-semibold text-white shadow-sm transition"
                   >
                     <span>Confirm Series Scheduling via AI Copilot</span>
                     <Sparkles className="h-4 w-4" />
@@ -462,17 +462,17 @@ export const TrainerConsole: React.FC<TrainerConsoleProps> = ({ onOpenCoach }) =
         {activeTab === 'availability' && (
           <div className="grid md:grid-cols-2 gap-6">
             {/* Weekly Availability Grid */}
-            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4">
-              <h2 className="text-base font-bold text-slate-900 dark:text-white">
+            <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm space-y-4">
+              <h2 className="text-base font-bold text-text-primary">
                 Regular Working Hours
               </h2>
               <div className="space-y-2">
                 {availabilityData?.slots?.map((slot: any, i: number) => {
                   const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
                   return (
-                    <div key={i} className="flex items-center justify-between rounded-lg bg-slate-50 dark:bg-slate-800/60 p-3 text-xs">
-                      <span className="font-semibold text-slate-800 dark:text-slate-200">{dayNames[slot.weekday]}</span>
-                      <span className="text-slate-500 dark:text-slate-400">{slot.start_time} - {slot.end_time}</span>
+                    <div key={i} className="flex items-center justify-between rounded-lg bg-surface-raised p-3 text-xs">
+                      <span className="font-semibold text-text-primary">{dayNames[slot.weekday]}</span>
+                      <span className="text-text-muted">{slot.start_time} - {slot.end_time}</span>
                     </div>
                   );
                 })}
@@ -480,8 +480,8 @@ export const TrainerConsole: React.FC<TrainerConsoleProps> = ({ onOpenCoach }) =
             </div>
 
             {/* Book Time Off Form */}
-            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4">
-              <h2 className="text-base font-bold text-slate-900 dark:text-white">
+            <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm space-y-4">
+              <h2 className="text-base font-bold text-text-primary">
                 Schedule Time Off / Vacation
               </h2>
 
@@ -493,45 +493,45 @@ export const TrainerConsole: React.FC<TrainerConsoleProps> = ({ onOpenCoach }) =
                 className="space-y-3"
               >
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-text-primary mb-1">
                     Starts At
                   </label>
                   <input
                     type="datetime-local"
                     value={timeOffStart}
                     onChange={(e) => setTimeOffStart(e.target.value)}
-                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 text-xs text-slate-900 dark:text-white"
+                    className="w-full rounded-xl border border-border bg-surface-raised p-2.5 text-xs text-text-primary min-h-[44px]"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-text-primary mb-1">
                     Ends At
                   </label>
                   <input
                     type="datetime-local"
                     value={timeOffEnd}
                     onChange={(e) => setTimeOffEnd(e.target.value)}
-                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 text-xs text-slate-900 dark:text-white"
+                    className="w-full rounded-xl border border-border bg-surface-raised p-2.5 text-xs text-text-primary min-h-[44px]"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-text-primary mb-1">
                     Reason
                   </label>
                   <input
                     type="text"
                     value={timeOffReason}
                     onChange={(e) => setTimeOffReason(e.target.value)}
-                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 text-xs text-slate-900 dark:text-white"
+                    className="w-full rounded-xl border border-border bg-surface-raised p-2.5 text-xs text-text-primary min-h-[44px]"
                   />
                 </div>
 
                 <button
                   type="submit"
                   disabled={submitTimeOffMutation.isPending}
-                  className="rounded-xl bg-blue-600 hover:bg-blue-700 px-4 py-2 text-xs font-semibold text-white shadow-sm transition disabled:opacity-50"
+                  className="min-h-[44px] rounded-xl bg-accent hover:bg-accent-hover px-4 py-2 text-xs font-semibold text-white shadow-sm transition disabled:opacity-50"
                 >
                   {submitTimeOffMutation.isPending ? 'Saving...' : 'Book Time Off'}
                 </button>
@@ -542,30 +542,30 @@ export const TrainerConsole: React.FC<TrainerConsoleProps> = ({ onOpenCoach }) =
 
         {/* Tab 4: Member Reviews & Feedback */}
         {activeTab === 'feedback' && (
-          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4">
+          <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm space-y-4">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10 text-amber-500">
                 <Star className="h-5 w-5" />
               </div>
               <div>
-                <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                <h2 className="text-base font-bold text-text-primary">
                   Aggregated Member Reviews
                 </h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
+                <p className="text-xs text-text-muted">
                   K-Anonymity Privacy Floor: Individual reviews are anonymized and aggregated.
                 </p>
               </div>
             </div>
 
             {feedbackData?.suppressed ? (
-              <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 p-4 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-600 dark:text-amber-400 flex items-start gap-2">
                 <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                 <p>{feedbackData.message}</p>
               </div>
             ) : (
               <div className="space-y-2 text-xs">
-                <p className="font-semibold">Average Rating: 4.8 / 5.0 ({feedbackData?.count || 12} reviews)</p>
-                <p className="text-slate-500">Summary: Members highlight excellent pacing, clear cues, and motivational energy.</p>
+                <p className="font-semibold text-text-primary">Average Rating: 4.8 / 5.0 ({feedbackData?.count || 12} reviews)</p>
+                <p className="text-text-muted">Summary: Members highlight excellent pacing, clear cues, and motivational energy.</p>
               </div>
             )}
           </div>

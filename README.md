@@ -170,3 +170,20 @@ npm test
 ```
 All routes (`/register`, `/verify`, `/login`, `/forgot`, `/reset`, `/onboarding`, `/app`, `/app/membership`, `/app/privacy`, `/trainer`, `/admin`), AI Coach drawer, bundle cards, and role consoles are compiled and tested with 100% pass rate.
 
+Run Phase P12b visual design, tokens, and screenshot verification (Gate):
+```powershell
+# 1. Full frontend build and test check
+cd frontend
+npm run build
+npm test
+
+# 2. Check no hard-coded hex colors outside theme layer
+git grep -n -E "#[0-9a-fA-F]{3,6}" frontend/src/
+
+# 3. View visual design spec & captured responsive screenshots
+Get-Item ..\docs\DESIGN.md
+Get-ChildItem ..\docs\screenshots\
+```
+Design documentation is documented in [`docs/DESIGN.md`](file:///docs/DESIGN.md), featuring custom CSS variables mapped to Tailwind semantic tokens, Plus Jakarta Sans typography, shared accessible UI primitives (`Button`, `Card`, `Badge`, `Skeleton`, `EmptyState`, `Dialog`, `Drawer`, `Toast`), reduced-motion fallbacks, >=44px mobile touch targets, and visual screen captures across desktop light and mobile dark viewports under `docs/screenshots/`.
+
+

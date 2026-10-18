@@ -96,16 +96,16 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-slate-50 dark:bg-slate-950 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="w-full max-w-md space-y-8 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 shadow-sm">
+    <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-base py-12 px-4 sm:px-6 lg:px-8">
+      <div className="w-full max-w-md space-y-8 rounded-2xl border border-border bg-surface p-8 shadow-sm">
         <div className="text-center space-y-2">
-          <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+          <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-accent/10 text-accent">
             <Dumbbell className="h-6 w-6" />
           </div>
-          <h2 className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+          <h2 className="text-3xl font-extrabold tracking-tight text-text-primary">
             Sign In to GymPro
           </h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
+          <p className="text-sm text-text-muted">
             Access your coach, schedules, or console
           </p>
         </div>
@@ -114,18 +114,18 @@ export const LoginPage: React.FC = () => {
           <div
             className={`flex items-start gap-2.5 rounded-xl p-3.5 text-xs ${
               pendingState === 'ACCOUNT_PENDING_ADMIN_CODE'
-                ? 'bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 text-purple-800 dark:text-purple-300'
+                ? 'bg-accent/10 border border-accent/20 text-accent'
                 : pendingState === 'ACCOUNT_PENDING_APPROVAL'
-                ? 'bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300'
-                : 'bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300'
+                ? 'bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400'
+                : 'bg-danger/10 border border-danger/20 text-danger'
             }`}
           >
             {pendingState === 'ACCOUNT_PENDING_ADMIN_CODE' ? (
-              <KeyRound className="h-4 w-4 shrink-0 text-purple-600 dark:text-purple-400 mt-0.5" />
+              <KeyRound className="h-4 w-4 shrink-0 text-accent mt-0.5" />
             ) : pendingState === 'ACCOUNT_PENDING_APPROVAL' ? (
-              <Clock className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+              <Clock className="h-4 w-4 shrink-0 text-amber-500 mt-0.5" />
             ) : (
-              <AlertCircle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400 mt-0.5" />
+              <AlertCircle className="h-4 w-4 shrink-0 text-danger mt-0.5" />
             )}
             <span>{errorMessage}</span>
           </div>
@@ -133,7 +133,7 @@ export const LoginPage: React.FC = () => {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+            <label className="block text-xs font-semibold text-text-primary mb-1">
               Email Address
             </label>
             <div className="relative">
@@ -143,20 +143,20 @@ export const LoginPage: React.FC = () => {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="name@example.com"
-                className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 pl-10 pr-3.5 py-2.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                className="w-full min-h-[44px] rounded-xl border border-border bg-surface-raised pl-10 pr-3.5 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
               />
-              <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+              <Mail className="absolute left-3 top-3.5 h-4 w-4 text-text-muted" />
             </div>
           </div>
 
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+              <label className="block text-xs font-semibold text-text-primary">
                 Password
               </label>
               <Link
                 to="/forgot"
-                className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline"
+                className="text-xs text-accent hover:underline"
               >
                 Forgot password?
               </Link>
@@ -168,16 +168,16 @@ export const LoginPage: React.FC = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Enter password"
-                className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 pl-10 pr-3.5 py-2.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                className="w-full min-h-[44px] rounded-xl border border-border bg-surface-raised pl-10 pr-3.5 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
               />
-              <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+              <Lock className="absolute left-3 top-3.5 h-4 w-4 text-text-muted" />
             </div>
           </div>
 
           {/* Admin Activation One-Time Code Box */}
           {showAdminCodeBox && (
-            <div className="rounded-xl border border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-950/20 p-4 space-y-2">
-              <label className="block text-xs font-bold text-purple-900 dark:text-purple-300">
+            <div className="rounded-xl border border-border bg-surface-raised p-4 space-y-2">
+              <label className="block text-xs font-bold text-text-primary">
                 Admin One-Time Activation Code
               </label>
               <div className="relative">
@@ -188,11 +188,11 @@ export const LoginPage: React.FC = () => {
                   value={adminCode}
                   onChange={(e) => setAdminCode(e.target.value)}
                   placeholder="Enter 6-digit code"
-                  className="w-full rounded-lg border border-purple-300 dark:border-purple-700 bg-white dark:bg-slate-800 pl-10 pr-3.5 py-2 font-mono text-sm tracking-widest text-slate-900 dark:text-white focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                  className="w-full min-h-[44px] rounded-lg border border-border bg-surface pl-10 pr-3.5 py-2 font-mono text-sm tracking-widest text-text-primary focus:border-accent focus:outline-none"
                 />
-                <KeyRound className="absolute left-3 top-2.5 h-4 w-4 text-purple-500" />
+                <KeyRound className="absolute left-3 top-3.5 h-4 w-4 text-accent" />
               </div>
-              <p className="text-[11px] text-purple-700 dark:text-purple-400">
+              <p className="text-[11px] text-text-muted">
                 Enter the HMAC authorization code sent to existing administrators.
               </p>
             </div>
@@ -201,17 +201,17 @@ export const LoginPage: React.FC = () => {
           <button
             type="submit"
             disabled={loginMutation.isPending}
-            className="w-full flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 py-3 text-sm font-semibold text-white shadow-sm transition disabled:opacity-50"
+            className="w-full min-h-[44px] flex items-center justify-center gap-2 rounded-xl bg-accent hover:bg-accent-hover py-3 text-sm font-semibold text-white shadow-sm transition disabled:opacity-50"
           >
             <span>{loginMutation.isPending ? 'Verifying...' : showAdminCodeBox ? 'Activate & Sign In' : 'Sign In'}</span>
             <ArrowRight className="h-4 w-4" />
           </button>
         </form>
 
-        <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800">
+        <div className="flex items-center justify-between text-xs text-text-muted pt-2 border-t border-border">
           <p>
             Don't have an account?{' '}
-            <Link to="/register" className="font-semibold text-emerald-600 dark:text-emerald-400 hover:underline">
+            <Link to="/register" className="font-semibold text-accent hover:underline">
               Register
             </Link>
           </p>
@@ -219,7 +219,7 @@ export const LoginPage: React.FC = () => {
           <button
             type="button"
             onClick={() => setShowAdminCodeBox((s) => !s)}
-            className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:underline"
+            className="text-text-muted hover:text-text-primary hover:underline min-h-[44px] flex items-center"
           >
             {showAdminCodeBox ? 'Hide Code Box' : 'Admin Code?'}
           </button>

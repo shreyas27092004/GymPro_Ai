@@ -1,5 +1,5 @@
 // src/coach/GymProCoach.tsx
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import {
   Mic,
@@ -11,9 +11,11 @@ import {
   X,
   Bot,
   Sparkles,
+  CreditCard,
+  Ban,
 } from 'lucide-react';
 import { client, friendlyError } from '../api/client';
-import { openCheckout } from '../payments/openCheckout';
+import { openCheckout, type Checkout } from '../payments/openCheckout';
 import { useAuth } from '../auth/AuthContext';
 import type { ChatMessage, Bundle } from '../types';
 
@@ -29,6 +31,14 @@ export const GymProCoach: React.FC<GymProCoachProps> = ({
   conversationId = 'default',
 }) => {
   const { me } = useAuth();
+  const drawerRef = useRef<HTMLDivElement>(null);
+
+  // Pending payment state for "Pay now" and "Cancel payment"
+  const [pendingPayment, setPendingPayment] = useState<{
+    payment: Checkout;
+    paymentId: string;
+  } | null>(null);
+
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'hello',
@@ -64,6 +74,22 @@ export const GymProCoach: React.FC<GymProCoachProps> = ({
   const [listening, setListening] = useState(false);
   const [speak, setSpeak] = useState(false);
   const recRef = useRef<any>(null);
+
+  // Focus trap & Escape key listener
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) {
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onClose]);
 
   const push = (m: Omit<ChatMessage, 'id'>) => {
     const msg: ChatMessage = { ...m, id: crypto.randomUUID() };
@@ -113,15 +139,20 @@ export const GymProCoach: React.FC<GymProCoachProps> = ({
       );
 
       if (r.status === 'AWAITING_PAYMENT' && r.payment) {
+        setPendingPayment({ payment: r.payment, paymentId: r.payment.payment_id });
         push({ sender: 'agent', text: 'Waiting for payment confirmation. Opening secure checkout...' });
         const payRes = await openCheckout(r.payment, {
           name: me?.full_name || 'Member',
           email: me?.email_masked || 'member@gympro.test',
         });
         if (payRes === 'DISMISSED') {
-          push({ sender: 'agent', text: 'Payment was dismissed. You can reopen checkout from your Membership page.' });
+          push({
+            sender: 'agent',
+            text: 'Payment was dismissed. You can tap "Pay now" below to complete checkout or "Cancel payment" to abandon.',
+          });
         } else if (payRes.ok) {
-          push({ sender: 'agent', text: 'Payment successful! Your membership is active.' });
+          setPendingPayment(null);
+          push({ sender: 'agent', text: 'Payment confirmed! Your plan change is active.' });
         } else {
           push({ sender: 'agent', text: `Payment could not be completed (${payRes.error || 'Failed'}).` });
         }
@@ -130,7 +161,7 @@ export const GymProCoach: React.FC<GymProCoachProps> = ({
 
       push({
         sender: 'agent',
-        text: r.ok ? 'Done. It is confirmed.' : `That could not be completed (${r.error}). Want me to find alternatives?`,
+        text: r.ok ? 'Confirmed. Your request has executed.' : `Could not complete (${r.error}). Want me to find alternatives?`,
       });
     },
     onError: (e: any) => push({ sender: 'agent', text: friendlyError(e) }),
@@ -161,17 +192,22 @@ export const GymProCoach: React.FC<GymProCoachProps> = ({
       );
 
       if (r.status === 'AWAITING_PAYMENT' && r.payment) {
-        push({ sender: 'agent', text: 'Waiting for payment confirmation. Opening secure checkout...' });
+        setPendingPayment({ payment: r.payment, paymentId: r.payment.payment_id });
+        push({ sender: 'agent', text: 'Waiting for payment. Opening secure checkout window...' });
         const payRes = await openCheckout(r.payment, {
           name: me?.full_name || 'Member',
           email: me?.email_masked || 'member@gympro.test',
         });
         if (payRes === 'DISMISSED') {
-          push({ sender: 'agent', text: 'Payment was dismissed. You can reopen checkout from your Membership page.' });
+          push({
+            sender: 'agent',
+            text: 'Payment was dismissed. You can tap "Pay now" below to reopen checkout or "Cancel payment" to skip.',
+          });
         } else if (payRes.ok) {
+          setPendingPayment(null);
           push({ sender: 'agent', text: 'Payment received! Your bundle steps have finished executing.' });
         } else {
-          push({ sender: 'agent', text: `Payment could not be completed (${payRes.error || 'Failed'}).` });
+          push({ sender: 'agent', text: `Payment failed (${payRes.error || 'Verification error'}).` });
         }
         return;
       }
@@ -182,14 +218,43 @@ export const GymProCoach: React.FC<GymProCoachProps> = ({
         sender: 'agent',
         text:
           failed.length === 0
-            ? 'All steps are done.'
-            : `Some steps did not complete: ${failed
+            ? 'All steps completed.'
+            : `Some steps could not complete: ${failed
                 .map((s) => `step ${s.step_no} ${s.status.toLowerCase()}`)
-                .join(', ')}. The others went through.`,
+                .join(', ')}. The independent steps went through.`,
       });
     },
     onError: (e: any) => push({ sender: 'agent', text: friendlyError(e) }),
   });
+
+  // Re-open checkout for pending payment
+  const handlePayNow = async () => {
+    if (!pendingPayment) return;
+    try {
+      const payRes = await openCheckout(pendingPayment.payment, {
+        name: me?.full_name || 'Member',
+        email: me?.email_masked || 'member@gympro.test',
+      });
+      if (payRes.ok) {
+        setPendingPayment(null);
+        push({ sender: 'agent', text: 'Payment successful! Action completed.' });
+      }
+    } catch {
+      push({ sender: 'agent', text: 'Checkout could not be loaded.' });
+    }
+  };
+
+  // Cancel pending payment
+  const handleCancelPayment = async () => {
+    if (!pendingPayment) return;
+    try {
+      await client.post(`/payments/${pendingPayment.paymentId}/cancel`);
+      setPendingPayment(null);
+      push({ sender: 'agent', text: 'Payment cancelled. Associated steps have been skipped.' });
+    } catch (e: any) {
+      push({ sender: 'agent', text: friendlyError(e) });
+    }
+  };
 
   const send = (text: string) => {
     const t = text.trim();
@@ -237,25 +302,26 @@ export const GymProCoach: React.FC<GymProCoachProps> = ({
 
   return (
     <div
-      className="fixed inset-y-0 right-0 z-50 flex w-full max-w-lg flex-col bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 shadow-2xl transition-transform duration-300"
+      ref={drawerRef}
+      className="fixed inset-y-0 right-0 z-50 flex w-full sm:max-w-lg flex-col bg-surface border-l border-border shadow-2xl transition-transform duration-300"
       role="region"
       aria-label="AI fitness coach"
     >
       {/* Header */}
-      <header className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/80 px-4 py-3">
-        <div className="flex items-center space-x-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+      <header className="flex items-center justify-between border-b border-border bg-surface-raised/50 px-4 py-3 min-h-[56px]">
+        <div className="flex items-center space-x-2.5">
+          <div className="flex h-9 w-9 items-center justify-center rounded-sm bg-accent-subtle text-accent">
             <Bot className="h-5 w-5" />
           </div>
           <div>
             <div className="flex items-center gap-1.5">
-              <h2 className="text-base font-bold text-slate-900 dark:text-white">AI Fitness Concierge</h2>
-              <span className="flex items-center rounded-full bg-emerald-100 dark:bg-emerald-950/60 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-300">
+              <h2 className="text-base font-bold text-text-primary">AI Fitness Concierge</h2>
+              <span className="flex items-center rounded-sm bg-accent-subtle px-2 py-0.5 text-[10px] font-bold text-accent">
                 <Sparkles className="mr-0.5 h-2.5 w-2.5" /> Active
               </span>
             </div>
-            <p className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400">
-              <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+            <p className="flex items-center gap-1 text-[11px] text-text-muted">
+              <ShieldCheck className="h-3.5 w-3.5 text-accent shrink-0" />
               I never change anything until you tap Confirm. Voice never confirms.
             </p>
           </div>
@@ -265,16 +331,16 @@ export const GymProCoach: React.FC<GymProCoachProps> = ({
           <button
             onClick={() => setSpeak((s) => !s)}
             aria-label={speak ? 'Turn off spoken replies' : 'Turn on spoken replies'}
-            className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+            className="rounded-sm p-2 text-text-muted hover:bg-surface-raised transition min-h-[44px] min-w-[44px] flex items-center justify-center"
           >
-            {speak ? <Volume2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> : <VolumeX className="h-4 w-4" />}
+            {speak ? <Volume2 className="h-5 w-5 text-accent" /> : <VolumeX className="h-5 w-5" />}
           </button>
           <button
             onClick={onClose}
             aria-label="Close assistant"
-            className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+            className="rounded-sm p-2 text-text-muted hover:bg-surface-raised transition min-h-[44px] min-w-[44px] flex items-center justify-center"
           >
-            <X className="h-4 w-4" />
+            <X className="h-5 w-5" />
           </button>
         </div>
       </header>
@@ -284,10 +350,10 @@ export const GymProCoach: React.FC<GymProCoachProps> = ({
         {messages.map((m) => (
           <div key={m.id} className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div
-              className={`max-w-[90%] whitespace-pre-line rounded-2xl p-3.5 text-sm shadow-sm ${
+              className={`max-w-[90%] whitespace-pre-line rounded-md p-3.5 text-sm shadow-sm ${
                 m.sender === 'user'
-                  ? 'bg-emerald-600 text-white dark:bg-emerald-600'
-                  : 'border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100'
+                  ? 'bg-accent text-white font-medium'
+                  : 'border border-border bg-surface text-text-primary'
               }`}
             >
               {m.text}
@@ -295,34 +361,34 @@ export const GymProCoach: React.FC<GymProCoachProps> = ({
               {/* Bundle Card */}
               {m.bundle && (
                 <div
-                  className="mt-3 space-y-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/80 p-3 text-xs"
+                  className="mt-3 space-y-2 rounded-sm border border-border bg-surface-raised/40 p-3 text-xs"
                   aria-label={m.bundle.headline}
                 >
-                  <div className="font-semibold text-slate-900 dark:text-white border-b border-slate-200 dark:border-slate-700 pb-1.5 flex items-center justify-between">
+                  <div className="font-semibold text-text-primary border-b border-border pb-1.5 flex items-center justify-between">
                     <span>{m.bundle.headline}</span>
-                    <span className="text-[10px] text-slate-400 font-normal">
+                    <span className="text-[10px] text-text-muted font-normal">
                       Expires in 15m
                     </span>
                   </div>
                   <ol className="space-y-2 pt-1">
                     {m.bundle.steps.map((s) => (
                       <li key={s.step_no} className="flex items-start gap-2">
-                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/50 text-[11px] font-bold text-emerald-800 dark:text-emerald-300">
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent-subtle text-[11px] font-bold text-accent">
                           {s.step_no}
                         </span>
                         <div className="flex-1">
-                          <p className="font-medium text-slate-800 dark:text-slate-200">{s.summary}</p>
+                          <p className="font-medium text-text-primary">{s.summary}</p>
                           {s.depends_on.length > 0 && (
-                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                            <p className="text-[11px] text-text-muted">
                               Goes ahead only if step {s.depends_on.join(', ')} succeeds
                             </p>
                           )}
                           {s.result && (
                             <span
-                              className={`mt-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                              className={`mt-1 inline-block rounded-sm px-1.5 py-0.5 text-[10px] font-semibold ${
                                 s.result === 'EXECUTED'
-                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                                  : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                                  ? 'bg-accent-subtle text-accent'
+                                  : 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300'
                               }`}
                             >
                               {s.result}
@@ -333,9 +399,9 @@ export const GymProCoach: React.FC<GymProCoachProps> = ({
                     ))}
                   </ol>
                   {m.bundle.questions.length > 0 && (
-                    <div className="mt-2 border-t border-slate-200 dark:border-slate-700 pt-2 space-y-1">
+                    <div className="mt-2 border-t border-border pt-2 space-y-1">
                       {m.bundle.questions.map((q, i) => (
-                        <p key={i} className="text-[11px] text-slate-600 dark:text-slate-400 italic">
+                        <p key={i} className="text-[11px] text-text-muted italic">
                           Question from {q.agent}: {q.text}
                         </p>
                       ))}
@@ -353,7 +419,7 @@ export const GymProCoach: React.FC<GymProCoachProps> = ({
                         key={i}
                         disabled={busy}
                         onClick={() => confirmAction.mutate(a.action_id)}
-                        className="rounded-lg bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition disabled:opacity-50"
+                        className="rounded-sm bg-accent hover:bg-accent-hover px-3 py-2 text-xs font-semibold text-white shadow-sm transition disabled:opacity-50 min-h-[36px]"
                       >
                         Confirm: {a.label}
                       </button>
@@ -362,7 +428,7 @@ export const GymProCoach: React.FC<GymProCoachProps> = ({
                         key={i}
                         disabled={busy}
                         onClick={() => confirmBundle.mutate(a.bundle_id)}
-                        className="rounded-lg bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition disabled:opacity-50"
+                        className="rounded-sm bg-accent hover:bg-accent-hover px-3 py-2 text-xs font-semibold text-white shadow-sm transition disabled:opacity-50 min-h-[36px]"
                       >
                         Confirm: {a.label}
                       </button>
@@ -371,7 +437,7 @@ export const GymProCoach: React.FC<GymProCoachProps> = ({
                         key={i}
                         disabled={busy}
                         onClick={() => send(a.label)}
-                        className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition"
+                        className="rounded-sm border border-border bg-surface px-3 py-2 text-xs font-medium text-text-primary hover:bg-surface-raised transition min-h-[36px]"
                       >
                         {a.label}
                       </button>
@@ -383,9 +449,38 @@ export const GymProCoach: React.FC<GymProCoachProps> = ({
           </div>
         ))}
 
+        {/* Pending Payment State (Pay Now / Cancel Payment) */}
+        {pendingPayment && (
+          <div className="rounded-md border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 p-4 space-y-3">
+            <div className="flex items-center gap-2 text-xs font-bold text-amber-900 dark:text-amber-200">
+              <CreditCard className="h-4 w-4 text-amber-600" />
+              <span>Payment Pending: Waiting for checkout</span>
+            </div>
+            <p className="text-xs text-amber-800 dark:text-amber-300">
+              Your order is ready. Complete the payment to finalize the change, or cancel to abandon.
+            </p>
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                onClick={handlePayNow}
+                className="flex items-center gap-1.5 rounded-sm bg-accent hover:bg-accent-hover px-3.5 py-2 text-xs font-semibold text-white transition min-h-[40px]"
+              >
+                <CreditCard className="h-3.5 w-3.5" />
+                <span>Pay now</span>
+              </button>
+              <button
+                onClick={handleCancelPayment}
+                className="flex items-center gap-1.5 rounded-sm border border-border bg-surface px-3.5 py-2 text-xs font-semibold text-danger hover:bg-danger-subtle transition min-h-[40px]"
+              >
+                <Ban className="h-3.5 w-3.5" />
+                <span>Cancel payment</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {busy && (
-          <div className="flex items-center space-x-2 text-xs text-slate-500 dark:text-slate-400">
-            <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+          <div className="flex items-center space-x-2 text-xs text-text-muted">
+            <div className="h-2 w-2 rounded-full bg-accent animate-pulse" />
             <span>Working...</span>
           </div>
         )}
@@ -393,7 +488,7 @@ export const GymProCoach: React.FC<GymProCoachProps> = ({
 
       {/* Input Form */}
       <form
-        className="flex items-center gap-2 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3"
+        className="flex items-center gap-2 border-t border-border bg-surface p-3"
         onSubmit={(e) => {
           e.preventDefault();
           send(input);
@@ -403,10 +498,10 @@ export const GymProCoach: React.FC<GymProCoachProps> = ({
           type="button"
           onClick={toggleVoice}
           aria-label={listening ? 'Stop voice input' : 'Start voice input'}
-          className={`rounded-full p-2.5 transition ${
+          className={`rounded-sm p-2.5 transition min-h-[44px] min-w-[44px] flex items-center justify-center ${
             listening
-              ? 'animate-pulse bg-red-500 text-white'
-              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+              ? 'animate-pulse bg-danger text-white'
+              : 'bg-surface-raised text-text-muted hover:text-text-primary hover:bg-surface-raised/80'
           }`}
         >
           {listening ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
@@ -419,14 +514,14 @@ export const GymProCoach: React.FC<GymProCoachProps> = ({
           aria-label="Message"
           placeholder={placeholderText}
           disabled={busy}
-          className="flex-1 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-50"
+          className="flex-1 rounded-sm border border-border bg-surface px-3.5 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none min-h-[44px] disabled:opacity-50"
         />
 
         <button
           type="submit"
           disabled={busy || !input.trim()}
           aria-label="Send"
-          className="rounded-xl bg-emerald-600 hover:bg-emerald-700 p-2.5 text-white shadow-sm transition disabled:opacity-50"
+          className="rounded-sm bg-accent hover:bg-accent-hover p-2.5 text-white shadow-sm transition disabled:opacity-50 min-h-[44px] min-w-[44px] flex items-center justify-center"
         >
           <Send className="h-5 w-5" />
         </button>
