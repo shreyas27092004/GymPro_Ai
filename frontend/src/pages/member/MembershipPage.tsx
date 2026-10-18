@@ -227,20 +227,35 @@ export const MembershipPage: React.FC = () => {
                     <span className="text-xs text-text-muted">/ month</span>
                   </div>
 
-                  <p className="text-xs text-text-muted mt-2">
-                    {p.classes_per_month > 100
-                      ? 'Unlimited access to all classes'
-                      : `Includes ${p.classes_per_month} classes per monthly cycle`}
-                  </p>
+                  {(() => {
+                    const perkList: string[] = Array.isArray(p.perks)
+                      ? p.perks
+                      : typeof p.perks === 'object' && p.perks !== null
+                      ? Object.entries(p.perks)
+                          .filter(([_, v]) => v !== false && v !== 0 && v !== null)
+                          .map(([k, v]) => (v === true ? k.replace(/_/g, ' ') : `${k.replace(/_/g, ' ')}: ${v}`))
+                      : [];
+                    const classesCount = p.classes_per_month ?? p.perks?.group_classes_per_month;
 
-                  <ul className="mt-6 space-y-2.5 text-xs text-text-muted">
-                    {(p.perks || []).map((perk: string, i: number) => (
-                      <li key={i} className="flex items-center gap-2">
-                        <CheckCircle className="h-4 w-4 text-accent shrink-0" />
-                        <span className="text-text-primary">{perk}</span>
-                      </li>
-                    ))}
-                  </ul>
+                    return (
+                      <>
+                        <p className="text-xs text-text-muted mt-2">
+                          {!classesCount || classesCount > 100
+                            ? 'Unlimited access to all classes'
+                            : `Includes ${classesCount} classes per monthly cycle`}
+                        </p>
+
+                        <ul className="mt-6 space-y-2.5 text-xs text-text-muted">
+                          {perkList.map((perk: string, i: number) => (
+                            <li key={i} className="flex items-center gap-2">
+                              <CheckCircle className="h-4 w-4 text-accent shrink-0" />
+                              <span className="text-text-primary capitalize">{perk}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    );
+                  })()}
                 </div>
 
                 <div className="mt-8 pt-4 border-t border-border">
