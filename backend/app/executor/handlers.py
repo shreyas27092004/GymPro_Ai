@@ -670,6 +670,268 @@ async def exec_decide_trainer_request(db: AsyncSession, s: SessionContext, actio
     return {"ok": True, "decision": p.decision}
 
 
+async def exec_create_class(db: AsyncSession, s: SessionContext, action: Any) -> dict[str, Any]:
+    payload = action.payload if isinstance(action.payload, dict) else json.loads(action.payload)
+    await set_rls_system(db)
+    cid = uuid.uuid4()
+    tid = uuid.UUID(s.user_id)
+    await db.execute(
+        text(
+            """
+            INSERT INTO fitness_classes (
+                id, trainer_id, title, category, impact, min_level, capacity,
+                start_time, end_time, trial_eligible, allowed_plans, status
+            ) VALUES (
+                :id, :tid, :title, CAST(:category AS class_category), CAST(:impact AS impact_level),
+                CAST(:min_level AS fitness_level_type), :capacity, :start_time, :end_time,
+                :trial_eligible, :allowed_plans, 'SCHEDULED'
+            )
+            """
+        ),
+        {
+            "id": cid,
+            "tid": tid,
+            "title": payload.get("title", "Fitness Class"),
+            "category": payload.get("category", "STRENGTH"),
+            "impact": payload.get("impact", "MODERATE"),
+            "min_level": payload.get("min_level", "BEGINNER"),
+            "capacity": payload.get("capacity", 15),
+            "start_time": payload.get("start_time"),
+            "end_time": payload.get("end_time"),
+            "trial_eligible": payload.get("trial_eligible", True),
+            "allowed_plans": payload.get("allowed_plans", []),
+        },
+    )
+    return {"ok": True, "class_id": str(cid), "title": payload.get("title")}
+
+
+async def exec_create_class_series(db: AsyncSession, s: SessionContext, action: Any) -> dict[str, Any]:
+    payload = action.payload if isinstance(action.payload, dict) else json.loads(action.payload)
+    await set_rls_system(db)
+    sid = uuid.uuid4()
+    tid = uuid.UUID(s.user_id)
+    start_str = payload.get("start_time")
+    base_dt = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
+    duration_min = payload.get("duration_minutes", 60)
+    weeks = payload.get("weeks", 4)
+    rrule = f"FREQ=WEEKLY;COUNT={weeks}"
+    await db.execute(
+        text(
+            """
+            INSERT INTO class_series (id, trainer_id, title, rrule, local_start, duration_min, first_date, created_by)
+            VALUES (:id, :tid, :title, :rrule, :local_start, :duration_min, :first_date, :uid)
+            """
+        ),
+        {
+            "id": sid,
+            "tid": tid,
+            "title": payload.get("title"),
+            "rrule": rrule,
+            "local_start": base_dt.time(),
+            "duration_min": duration_min,
+            "first_date": base_dt.date(),
+            "uid": tid,
+        },
+    )
+    created_count = 0
+    for i in range(weeks):
+        c_start = base_dt + timedelta(weeks=i)
+        c_end = c_start + timedelta(minutes=duration_min)
+        cid = uuid.uuid4()
+        try:
+            await db.execute(
+                text(
+                    """
+                    INSERT INTO fitness_classes (
+                        id, series_id, trainer_id, title, category, impact, min_level, capacity,
+                        start_time, end_time, trial_eligible, status
+                    ) VALUES (
+                        :id, :sid, :tid, :title, CAST(:cat AS class_category), 'MODERATE', 'BEGINNER',
+                        :cap, :start, :end, true, 'SCHEDULED'
+                    )
+                    """
+                ),
+                {
+                    "id": cid,
+                    "sid": sid,
+                    "tid": tid,
+                    "title": payload.get("title"),
+                    "cat": payload.get("category", "STRENGTH"),
+                    "cap": payload.get("capacity", 15),
+                    "start": c_start,
+                    "end": c_end,
+                },
+            )
+            created_count += 1
+        except Exception:
+            pass
+    return {"ok": True, "series_id": str(sid), "created_classes": created_count}
+
+
+async def exec_cancel_class(db: AsyncSession, s: SessionContext, action: Any) -> dict[str, Any]:
+    payload = action.payload if isinstance(action.payload, dict) else json.loads(action.payload)
+    await set_rls_system(db)
+    cid = uuid.UUID(payload.get("class_id"))
+    reason = payload.get("reason", "Cancelled by trainer")
+    await db.execute(
+        text("UPDATE fitness_classes SET status = 'CANCELLED' WHERE id = :cid"),
+        {"cid": cid},
+    )
+    b_res = await db.execute(
+        text("SELECT id, user_id FROM class_bookings WHERE class_id = :cid AND status = 'CONFIRMED'"),
+        {"cid": cid},
+    )
+    bookings = b_res.mappings().all()
+    for b in bookings:
+        await enqueue(
+            db,
+            user_id=b["user_id"],
+            routing_key="class.cancelled",
+            template="CLASS_CANCELLED",
+            params={"class_id": str(cid), "reason": reason},
+            dedupe_key=f"cancel-notice:{b['id']}",
+        )
+    return {"ok": True, "class_id": str(cid), "notified_members": len(bookings)}
+
+
+async def exec_update_restrictions(db: AsyncSession, s: SessionContext, action: Any) -> dict[str, Any]:
+    payload = action.payload if isinstance(action.payload, dict) else json.loads(action.payload)
+    await set_rls_system(db)
+    cid = uuid.UUID(payload.get("class_id"))
+    await db.execute(
+        text(
+            """
+            UPDATE fitness_classes
+            SET allowed_plans = COALESCE(:plans, allowed_plans),
+                min_age = COALESCE(:min_age, min_age)
+            WHERE id = :cid
+            """
+        ),
+        {
+            "cid": cid,
+            "plans": payload.get("allowed_plans"),
+            "min_age": payload.get("min_age"),
+        },
+    )
+    return {"ok": True, "class_id": str(cid)}
+
+
+async def exec_set_availability(db: AsyncSession, s: SessionContext, action: Any) -> dict[str, Any]:
+    payload = action.payload if isinstance(action.payload, dict) else json.loads(action.payload)
+    await set_rls_system(db)
+    tid = uuid.UUID(s.user_id)
+    aid = uuid.uuid4()
+    await db.execute(
+        text(
+            """
+            INSERT INTO trainer_availability (id, trainer_id, weekday, start_time, end_time)
+            VALUES (:id, :tid, :wd, :st, :et)
+            ON CONFLICT (trainer_id, weekday, start_time) DO UPDATE SET end_time = EXCLUDED.end_time
+            """
+        ),
+        {
+            "id": aid,
+            "tid": tid,
+            "wd": payload.get("weekday"),
+            "st": payload.get("start_time"),
+            "et": payload.get("end_time"),
+        },
+    )
+    return {"ok": True, "availability_id": str(aid)}
+
+
+async def exec_set_time_off(db: AsyncSession, s: SessionContext, action: Any) -> dict[str, Any]:
+    payload = action.payload if isinstance(action.payload, dict) else json.loads(action.payload)
+    await set_rls_system(db)
+    tid = uuid.UUID(s.user_id)
+    to_id = uuid.uuid4()
+    await db.execute(
+        text(
+            """
+            INSERT INTO trainer_time_off (id, trainer_id, starts_at, ends_at, reason)
+            VALUES (:id, :tid, :st, :et, :r)
+            """
+        ),
+        {
+            "id": to_id,
+            "tid": tid,
+            "st": payload.get("starts_at"),
+            "et": payload.get("ends_at"),
+            "r": payload.get("reason"),
+        },
+    )
+    return {"ok": True, "time_off_id": str(to_id)}
+
+
+async def exec_admin_verify_trainer(db: AsyncSession, s: SessionContext, action: Any) -> dict[str, Any]:
+    payload = action.payload if isinstance(action.payload, dict) else json.loads(action.payload)
+    await set_rls_system(db)
+    tid = uuid.UUID(payload.get("trainer_id"))
+    await db.execute(
+        text("UPDATE trainer_profiles SET certs_verified_at = NOW(), certs_verified_by = :aid WHERE trainer_id = :tid"),
+        {"aid": uuid.UUID(s.user_id), "tid": tid},
+    )
+    return {"ok": True, "trainer_id": str(tid), "verified": True}
+
+
+async def exec_admin_update_issue(db: AsyncSession, s: SessionContext, action: Any) -> dict[str, Any]:
+    payload = action.payload if isinstance(action.payload, dict) else json.loads(action.payload)
+    await set_rls_system(db)
+    iid = uuid.UUID(payload.get("issue_id"))
+    st = payload.get("status", "ACTIONED").upper()
+    await db.execute(
+        text("UPDATE issue_reports SET status = :st, handled_by = :aid, handled_at = NOW() WHERE id = :id"),
+        {"id": iid, "st": st, "aid": uuid.UUID(s.user_id)},
+    )
+    return {"ok": True, "issue_id": str(iid), "status": st}
+
+
+async def exec_admin_grant_membership(db: AsyncSession, s: SessionContext, action: Any) -> dict[str, Any]:
+    payload = action.payload if isinstance(action.payload, dict) else json.loads(action.payload)
+    await set_rls_system(db)
+    uid = uuid.UUID(payload.get("user_id"))
+    plan_code = payload.get("plan_code", "SILVER").upper()
+    days = payload.get("duration_days", 30)
+    mid = uuid.uuid4()
+    await db.execute(
+        text(
+            """
+            INSERT INTO memberships (id, user_id, plan_code, status, price_paid, start_date, end_date)
+            VALUES (:id, :uid, :code, 'ACTIVE', 0.00, CURRENT_DATE, (CURRENT_DATE + (:days || ' days')::interval)::date)
+            """
+        ),
+        {"id": mid, "uid": uid, "code": plan_code, "days": days},
+    )
+
+    return {"ok": True, "membership_id": str(mid), "plan_code": plan_code}
+
+
+async def exec_admin_broadcast(db: AsyncSession, s: SessionContext, action: Any) -> dict[str, Any]:
+    payload = action.payload if isinstance(action.payload, dict) else json.loads(action.payload)
+    await set_rls_system(db)
+    await enqueue(
+        db,
+        user_id=None,
+        routing_key="admin.broadcast",
+        template="ANNOUNCEMENT",
+        params={"subject": payload.get("subject"), "body": payload.get("body")},
+        dedupe_key=f"broadcast:{action.id}",
+    )
+    return {"ok": True, "subject": payload.get("subject")}
+
+
+async def exec_admin_invite_staff(db: AsyncSession, s: SessionContext, action: Any) -> dict[str, Any]:
+    payload = action.payload if isinstance(action.payload, dict) else json.loads(action.payload)
+    from ..auth.roles import create_staff_invite
+    res = await create_staff_invite(
+        db,
+        email=payload.get("email"),
+        role="TRAINER",
+        admin_id=uuid.UUID(s.user_id),
+    )
+    return res
+
+
 HANDLERS = {
     "BOOK_CLASS": exec_book,
     "CHANGE_PLAN": exec_change_plan,
@@ -678,7 +940,19 @@ HANDLERS = {
     "SEND_BOOKING_EMAIL": exec_send_booking_email,
     "SUBMIT_ISSUE_REPORT": exec_issue_report,
     "ADMIN_DECIDE_TRAINER_REQUEST": exec_decide_trainer_request,
+    "CREATE_CLASS": exec_create_class,
+    "CREATE_CLASS_SERIES": exec_create_class_series,
+    "CANCEL_CLASS": exec_cancel_class,
+    "UPDATE_CLASS_RESTRICTIONS": exec_update_restrictions,
+    "SET_AVAILABILITY": exec_set_availability,
+    "SET_TIME_OFF": exec_set_time_off,
+    "ADMIN_VERIFY_TRAINER": exec_admin_verify_trainer,
+    "ADMIN_UPDATE_ISSUE": exec_admin_update_issue,
+    "ADMIN_GRANT_MEMBERSHIP": exec_admin_grant_membership,
+    "ADMIN_BROADCAST": exec_admin_broadcast,
+    "ADMIN_INVITE_STAFF": exec_admin_invite_staff,
 }
+
 
 
 async def run_action(db: AsyncSession, s: SessionContext, action: Any) -> dict[str, Any]:

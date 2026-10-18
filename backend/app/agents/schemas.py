@@ -108,10 +108,41 @@ class TrainerInfoData(BaseModel):
     handoff_to: Literal["SCHEDULE", "MEMBERSHIP"] | None = None
 
 
+class TrainerOpsPreview(BaseModel):
+    ok: int = 0
+    skipped: int = 0
+    instances: list[dict[str, Any]] = []
+
+
+class TrainerOpsData(BaseModel):
+    operation: Literal["PREVIEW", "PROPOSE", "READ", "CLARIFY"] = "READ"
+    preview: TrainerOpsPreview | dict[str, Any] = Field(default_factory=dict)
+    mapped_restrictions: dict[str, Any] = Field(default_factory=dict)
+    members_affected: int = 0
+    created_as_draft: bool = False
+
+
+class AdminInsightsData(BaseModel):
+    kind: Literal["METRIC", "ISSUES", "TRAINER_REQUESTS", "DIGEST", "ACTION", "REFUSE"] = "METRIC"
+    metric: str | None = None
+    window: dict[str, Any] | None = None
+    overall: dict[str, Any] | None = None
+    series: list[dict[str, Any]] = []
+    top: list[dict[str, Any]] = []
+    bottom: list[dict[str, Any]] = []
+    suppressed_groups: int = 0
+    data_quality: dict[str, Any] = Field(default_factory=lambda: {"ok": True, "notes": []})
+    items: list[dict[str, Any]] = []
+    recommendations: list[dict[str, Any]] = []
+
+
 DATA_MODELS = {
     "NUTRITION": NutritionData,
     "COMMS": CommsData,
     "SUPPORT": SupportData,
     "FITNESS": FitnessData,
     "TRAINER_INFO": TrainerInfoData,
+    "TRAINER_OPS": TrainerOpsData,
+    "ADMIN_INSIGHTS": AdminInsightsData,
 }
+

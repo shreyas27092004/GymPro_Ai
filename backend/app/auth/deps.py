@@ -16,9 +16,10 @@ class SessionContext(BaseModel):
     user_id: str
     role: str                         # USER | TRAINER | ADMIN (read from DB)
     account_status: str               # must be ACTIVE for standard endpoints
-    plan: str | None
-    account_email: str                # server-only, masked when shown to client
-    full_name: str
+    plan: str | None = None
+    account_email: str = ""           # server-only, masked when shown to client
+    full_name: str = ""
+
     locale: str = "en"
     timezone: str = "Asia/Kolkata"
     age_years: int | None = None

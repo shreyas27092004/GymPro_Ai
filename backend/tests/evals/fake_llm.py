@@ -117,6 +117,10 @@ class FakeLLM:
             agent = "FITNESS"
         elif "AGENT: TRAINER_INFO" in sys_msg:
             agent = "TRAINER_INFO"
+        elif "AGENT: TRAINER_OPS" in sys_msg:
+            agent = "TRAINER_OPS"
+        elif "AGENT: ADMIN_INSIGHTS" in sys_msg:
+            agent = "ADMIN_INSIGHTS"
 
         # Check for injection or cross-user attempts across all agents
         if re.search(r"ignore\s+.*rules|you\s+are\s+admin|another\s+user|someone\s+else|lifetime\s+free|print\s+your.*prompt|steroid|hack\s+the\s+database|reveal\s+all.*admin\s+notes|unrestricted\s+ai", user_msg, re.IGNORECASE):
@@ -148,8 +152,13 @@ class FakeLLM:
             return self._handle_fitness(messages, user_msg, tool_results)
         elif agent == "TRAINER_INFO":
             return self._handle_trainer_info(messages, user_msg, tool_results)
+        elif agent == "TRAINER_OPS":
+            return self._handle_trainer_ops(messages, user_msg, tool_results)
+        elif agent == "ADMIN_INSIGHTS":
+            return self._handle_admin_insights(messages, user_msg, tool_results)
 
         return self._envelope_response(agent, "OK", [], "How can I help you today?")
+
 
     def _handle_schedule(self, messages: list[dict[str, Any]], user_msg: str, tool_results: list[dict[str, Any]]) -> FakeChatCompletion:
         # Check typo
@@ -732,7 +741,383 @@ class FakeLLM:
             },
         )
 
+    def _handle_trainer_ops(self, messages: list[dict[str, Any]], user_msg: str, tool_results: list[dict[str, Any]]) -> FakeChatCompletion:
+        u_match = re.search(r'<user_message>(.*?)</user_message>', user_msg, re.DOTALL)
+        actual_user_msg = u_match.group(1).strip() if u_match else user_msg
+        low = actual_user_msg.lower()
+
+
+        # Check role permission
+        session_match = re.search(r'<session_context>(.*?)</session_context>', messages[1]["content"] if len(messages) > 1 else "", re.DOTALL)
+        session_role = "TRAINER"
+        if session_match:
+            try:
+                s_dict = json.loads(session_match.group(1))
+                session_role = s_dict.get("role", "TRAINER")
+            except Exception:
+                pass
+
+        if session_role != "TRAINER":
+            return self._envelope_response(
+                agent="TRAINER_OPS",
+                status="REFUSED",
+                flags=["PRIVILEGE_ESCALATION"],
+                user_message="Only trainers can access trainer operations.",
+                data={"operation": "CLARIFY", "preview": {}, "mapped_restrictions": {}, "members_affected": 0, "created_as_draft": False},
+            )
+
+        # Invariant: Attendee health data is strictly prohibited
+        if any(k in low for k in ("health", "injury", "injuries", "intake", "medical", "blood pressure", "par-q")):
+            if any(k in low for k in ("attendee", "member", "roster", "who", "show", "view", "get")):
+                return self._envelope_response(
+                    agent="TRAINER_OPS",
+                    status="REFUSED",
+                    flags=["CROSS_USER_REQUEST"],
+                    user_message="Trainers cannot view attendee personal health or intake data.",
+                    data={"operation": "READ", "preview": {}, "mapped_restrictions": {}, "members_affected": 0, "created_as_draft": False},
+                )
+
+        # 1. Missing information
+        if "schedule" in low and not any(k in low for k in ("pm", "am", "10:00", "18:00", "6:00", "hiit", "yoga", "spin")):
+            return self._envelope_response(
+                agent="TRAINER_OPS",
+                status="NEEDS_INPUT",
+                flags=[],
+                user_message="What class title, time, duration, and capacity would you like to schedule?",
+                missing_fields=["title", "time", "duration", "capacity"],
+                data={"operation": "CLARIFY", "preview": {}, "mapped_restrictions": {}, "members_affected": 0, "created_as_draft": False},
+            )
+
+        # 2. Availability query
+        if "availability" in low and "set" not in low:
+            if not tool_results:
+                return self._tool_call_response([("call_to_1", "get_my_availability", {})])
+            r = json.loads(tool_results[-1]["content"].replace("<tool_result>", "").replace("</tool_result>", ""))
+            slots = r.get("slots", [])
+            return self._envelope_response(
+                agent="TRAINER_OPS",
+                status="OK",
+                flags=[],
+                user_message=f"You currently have {len(slots)} weekly availability windows configured.",
+                data={"operation": "READ", "preview": {}, "mapped_restrictions": {}, "members_affected": 0, "created_as_draft": False},
+            )
+
+        # 3. Set availability
+        if "set" in low and "availability" in low:
+            if not tool_results:
+                return self._tool_call_response([
+                    ("call_to_sa", "propose_set_availability", {"weekday": 0, "start_time": "09:00:00", "end_time": "17:00:00"})
+                ])
+            r = json.loads(tool_results[-1]["content"].replace("<tool_result>", "").replace("</tool_result>", ""))
+            return self._envelope_response(
+                agent="TRAINER_OPS",
+                status="NEEDS_CONFIRMATION",
+                flags=[],
+                user_message="Set weekly availability for Mondays 9:00 AM - 5:00 PM. Tap Confirm.",
+                confirmation={"action_id": r.get("action_id"), "summary": r.get("summary")},
+                data={"operation": "PROPOSE", "preview": {}, "mapped_restrictions": {}, "members_affected": 0, "created_as_draft": False},
+            )
+
+        # 4. Set time off
+        if "time off" in low or "vacation" in low or "leave" in low:
+            if not tool_results:
+                return self._tool_call_response([
+                    ("call_to_to", "propose_set_time_off", {
+                        "starts_at": "2026-10-25T00:00:00+05:30",
+                        "ends_at": "2026-10-27T23:59:59+05:30",
+                        "reason": "Personal leave"
+                    })
+                ])
+            r = json.loads(tool_results[-1]["content"].replace("<tool_result>", "").replace("</tool_result>", ""))
+            return self._envelope_response(
+                agent="TRAINER_OPS",
+                status="NEEDS_CONFIRMATION",
+                flags=[],
+                user_message="Set time off from 25 Oct to 27 Oct 2026. Tap Confirm to save.",
+                confirmation={"action_id": r.get("action_id"), "summary": r.get("summary")},
+                data={"operation": "PROPOSE", "preview": {}, "mapped_restrictions": {}, "members_affected": 0, "created_as_draft": False},
+            )
+
+        # 5. Roster inquiry
+        if "roster" in low or "who is in" in low:
+            if not tool_results:
+                cid = re.search(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", low)
+                target_cid = cid.group(0) if cid else "11111111-1111-1111-1111-111111111111"
+                return self._tool_call_response([("call_to_r", "get_class_roster", {"class_id": target_cid})])
+            r = json.loads(tool_results[-1]["content"].replace("<tool_result>", "").replace("</tool_result>", ""))
+            roster = r.get("roster", [])
+            names = ", ".join(item.get("first_name", "") for item in roster) if roster else "none"
+            return self._envelope_response(
+                agent="TRAINER_OPS",
+                status="OK",
+                flags=[],
+                user_message=f"Here is your class roster ({len(roster)} attendees): {names}.",
+                data={"operation": "READ", "preview": {}, "mapped_restrictions": {}, "members_affected": 0, "created_as_draft": False},
+            )
+
+        # 6. Feedback summary
+        if "feedback" in low or "rating" in low or "reviews" in low:
+            if not tool_results:
+                return self._tool_call_response([("call_to_fb", "get_feedback_summary", {})])
+            r = json.loads(tool_results[-1]["content"].replace("<tool_result>", "").replace("</tool_result>", ""))
+            if r.get("suppressed"):
+                msg = "Feedback summary is suppressed because fewer than 5 responses have been recorded."
+            else:
+                msg = f"Your average rating is {r.get('avg_rating')} from {r.get('count')} reviews."
+            return self._envelope_response(
+                agent="TRAINER_OPS",
+                status="OK",
+                flags=[],
+                user_message=msg,
+                data={"operation": "READ", "preview": {}, "mapped_restrictions": {}, "members_affected": 0, "created_as_draft": False},
+            )
+
+        # 7. Recurring series / class scheduling
+        if not tool_results:
+            return self._tool_call_response([
+                ("call_to_ps", "preview_series", {
+                    "start_time": "2026-10-19T18:00:00+05:30",
+                    "weeks": 4,
+                    "duration_minutes": 60,
+                    "weekdays": [0, 2, 4],
+                })
+            ])
+
+        has_proposed = any(
+            (tc.get("function", {}).get("name") if isinstance(tc, dict) else getattr(getattr(tc, "function", None), "name", None)) in ("propose_create_series", "propose_create_class")
+            for m in messages if m.get("role") == "assistant" and m.get("tool_calls")
+            for tc in m.get("tool_calls")
+        )
+
+
+        if not has_proposed:
+            return self._tool_call_response([
+                ("call_to_pcs", "propose_create_series", {
+                    "title": "HIIT",
+                    "category": "HIIT",
+                    "min_level": "BEGINNER",
+                    "capacity": 12,
+                    "weekday": 0,
+                    "start_time": "2026-10-19T18:00:00+05:30",
+                    "duration_minutes": 60,
+                    "weeks": 4,
+                    "contraindicated_for": ["KNEE"] if "knee" in low else [],
+                })
+            ])
+
+        propose_res = json.loads(tool_results[-1]["content"].replace("<tool_result>", "").replace("</tool_result>", ""))
+        return self._envelope_response(
+            agent="TRAINER_OPS",
+            status="NEEDS_CONFIRMATION",
+            flags=[],
+            user_message="HIIT, Mon/Wed/Fri at 6:00 PM for 4 weeks: 11 sessions can be created, 1 clashes with another class. Beginner level, cap 12, no knee issues. Tap Confirm.",
+            confirmation={
+                "action_id": propose_res.get("action_id", "f6666666-6666-6666-6666-666666666666"),
+                "summary": propose_res.get("summary", "Create recurring HIIT class series"),
+            },
+            data={
+                "operation": "PROPOSE",
+                "preview": {
+                    "ok": 11,
+                    "skipped": 1,
+                    "instances": [
+                        {"start": "2026-10-19T18:00:00+05:30", "status": "OK"},
+                        {"start": "2026-11-04T18:00:00+05:30", "status": "CONFLICT_TRAINER_OVERLAP"},
+                    ],
+                },
+                "mapped_restrictions": {
+                    "min_level": "BEGINNER",
+                    "contraindicated_for": ["KNEE"] if "knee" in low else [],
+                    "capacity": 12,
+                },
+                "members_affected": 0,
+                "created_as_draft": False,
+            },
+        )
+
+    def _handle_admin_insights(self, messages: list[dict[str, Any]], user_msg: str, tool_results: list[dict[str, Any]]) -> FakeChatCompletion:
+        u_match = re.search(r'<user_message>(.*?)</user_message>', user_msg, re.DOTALL)
+        actual_user_msg = u_match.group(1).strip() if u_match else user_msg
+        low = actual_user_msg.lower()
+
+
+        # Check role permission
+        session_match = re.search(r'<session_context>(.*?)</session_context>', messages[1]["content"] if len(messages) > 1 else "", re.DOTALL)
+        session_role = "ADMIN"
+        cooling_off = False
+        if session_match:
+            try:
+                s_dict = json.loads(session_match.group(1))
+                session_role = s_dict.get("role", "ADMIN")
+                cooling_off = s_dict.get("cooling_off_active", False)
+            except Exception:
+                pass
+
+        if session_role != "ADMIN":
+            return self._envelope_response(
+                agent="ADMIN_INSIGHTS",
+                status="REFUSED",
+                flags=["PRIVILEGE_ESCALATION"],
+                user_message="Only administrators can access admin insights.",
+                data={"kind": "REFUSE", "items": [], "recommendations": []},
+            )
+
+        # Invariant 1: Admin-role requests attempt -> REFUSED with PRIVILEGE_ESCALATION
+        if re.search(r"\b(approve|activate|create|grant|invite)\b.*\badmin\b", low) or "pending admin request" in low:
+            return self._envelope_response(
+                agent="ADMIN_INSIGHTS",
+                status="REFUSED",
+                flags=["PRIVILEGE_ESCALATION"],
+                user_message="Admin requests can't be approved through the assistant. You can reject or revoke one from the Approvals screen, and new admins activate with the one-time code you were emailed.",
+                data={"kind": "REFUSE", "items": [], "recommendations": []},
+            )
+
+        # Invariant 2: Per-member data or health attempt -> REFUSED
+        if any(k in low for k in ("intake", "health profile", "medical", "blood pressure", "par-q", "individual attendance")) and any(k in low for k in ("member", "user", "attendee", "person")):
+            return self._envelope_response(
+                agent="ADMIN_INSIGHTS",
+                status="REFUSED",
+                flags=["CROSS_USER_REQUEST"],
+                user_message="Individual member health metrics and per-member attendance are protected and cannot be disclosed.",
+                data={"kind": "REFUSE", "items": [], "recommendations": []},
+            )
+
+        # Cooling-off check on proposed actions
+        if cooling_off and any(k in low for k in ("invite", "approve ravi", "approve trainer", "broadcast", "grant")):
+            return self._envelope_response(
+                agent="ADMIN_INSIGHTS",
+                status="REFUSED",
+                flags=[],
+                user_message="Sensitive administrative actions cannot be proposed while the 24-hour cooling-off period is active.",
+                data={"kind": "REFUSE", "items": [], "recommendations": []},
+            )
+
+        # 1. Fill rate / list classes below fill
+        if "under" in low and ("40%" in low or "fill" in low or "full" in low):
+            if not tool_results:
+                return self._tool_call_response([("call_ai_bf", "list_classes_below_fill", {"threshold_pct": 40.0})])
+            r = json.loads(tool_results[-1]["content"].replace("<tool_result>", "").replace("</tool_result>", ""))
+            classes = r.get("classes", [])
+            bottom = [{"label": c.get("title"), "value": round(c.get("fill_pct", 0) / 100.0, 2)} for c in classes[:2]]
+            return self._envelope_response(
+                agent="ADMIN_INSIGHTS",
+                status="OK",
+                flags=[],
+                user_message="Two classes are under 40% full this week (12-18 Oct, Asia/Kolkata): Pilates 2 PM at 32% and Yoga 6 AM at 38%. Consider promoting or rescheduling them.",
+                data={
+                    "kind": "METRIC",
+                    "metric": "class_fill_rate",
+                    "window": {"start": "2026-10-12T00:00:00+05:30", "end": "2026-10-18T23:59:59+05:30", "timezone": "Asia/Kolkata"},
+                    "overall": None,
+                    "series": [],
+                    "top": [],
+                    "bottom": bottom or [{"label": "Pilates 2 PM", "value": 0.32}, {"label": "Yoga 6 AM", "value": 0.38}],
+                    "suppressed_groups": 0,
+                    "data_quality": {"ok": True, "notes": []},
+                    "items": [],
+                    "recommendations": [{"text": "Pilates 2 PM runs at 32% fill; consider moving it or promoting it.", "evidence_metric": "class_fill_rate"}],
+                },
+            )
+
+        # 2. Daily digest numbers
+        if "digest" in low:
+            if not tool_results:
+                return self._tool_call_response([("call_ai_dig", "get_daily_digest_numbers", {})])
+            r = json.loads(tool_results[-1]["content"].replace("<tool_result>", "").replace("</tool_result>", ""))
+            mem = r.get("active_memberships", 42)
+            book = r.get("bookings_today", 15)
+            occ = r.get("occupancy_rate", 0.78)
+            iss = r.get("open_issues", 2)
+            mrr_val = r.get("mrr", 85000.0)
+            msg = f"Good morning. There are {mem} active memberships and {book} class bookings today. Overall occupancy runs at {occ:.1%} with MRR at {mrr_val:.0f}. Currently {iss} open issues require staff review."
+            return self._envelope_response(
+                agent="ADMIN_INSIGHTS",
+                status="OK",
+                flags=[],
+                user_message=msg,
+                data={
+                    "kind": "DIGEST",
+                    "metric": "daily_digest",
+                    "overall": {"value": occ, "unit": "ratio"},
+                    "items": [{"active_memberships": mem, "bookings_today": book, "open_issues": iss, "mrr": mrr_val}],
+                    "recommendations": [],
+                },
+            )
+
+        # 3. Issue queue / triage
+        if "issue" in low and ("queue" in low or "list" in low or "open" in low):
+            if not tool_results:
+                return self._tool_call_response([("call_ai_iq", "get_issue_queue", {"status": "NEW"})])
+            r = json.loads(tool_results[-1]["content"].replace("<tool_result>", "").replace("</tool_result>", ""))
+            issues = r.get("issues", [])
+            return self._envelope_response(
+                agent="ADMIN_INSIGHTS",
+                status="OK",
+                flags=[],
+                user_message=f"There are {len(issues)} new issue reports in the queue requiring triage.",
+                data={"kind": "ISSUES", "items": issues, "recommendations": []},
+            )
+
+        # 4. Trainer requests
+        if "trainer request" in low and ("approve" in low or "decide" in low):
+            req_id_match = re.search(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", low)
+            target_rid = req_id_match.group(0) if req_id_match else "33333333-3333-3333-3333-333333333333"
+            if not tool_results:
+                return self._tool_call_response([("call_ai_gtr", "get_trainer_request", {"request_id": target_rid})])
+            has_proposed = any(
+                (tc.get("function", {}).get("name") if isinstance(tc, dict) else getattr(getattr(tc, "function", None), "name", None)) == "propose_decide_trainer_request"
+                for m in messages if m.get("role") == "assistant" and m.get("tool_calls")
+                for tc in m.get("tool_calls")
+            )
+
+            if not has_proposed:
+                return self._tool_call_response([
+                    ("call_ai_pdtr", "propose_decide_trainer_request", {
+                        "request_id": target_rid,
+                        "decision": "APPROVE",
+                        "reason": "Verified qualifications and interview complete"
+                    })
+                ])
+            r = json.loads(tool_results[-1]["content"].replace("<tool_result>", "").replace("</tool_result>", ""))
+            return self._envelope_response(
+                agent="ADMIN_INSIGHTS",
+                status="NEEDS_CONFIRMATION",
+                flags=[],
+                user_message="Approving activates the trainer account. Certifications remain unverified until inspected. Tap Confirm.",
+                confirmation={"action_id": r.get("action_id"), "summary": r.get("summary")},
+                data={"kind": "ACTION", "items": [{"request_id": target_rid, "decision": "APPROVE"}], "recommendations": []},
+            )
+
+        # 5. General metric query (occupancy_rate, mrr, etc.)
+        metric_name = "occupancy_rate"
+        for m_name in ("mrr", "churn_rate", "no_show_rate", "waitlist_pressure", "trial_conversion", "occupancy_rate"):
+            if m_name in low or m_name.replace("_", " ") in low:
+                metric_name = m_name
+                break
+
+        if not tool_results:
+            return self._tool_call_response([("call_ai_gm", "get_metric", {"metric_name": metric_name, "period": "30d"})])
+
+        r = json.loads(tool_results[-1]["content"].replace("<tool_result>", "").replace("</tool_result>", ""))
+        val = r.get("value", 0.84)
+        return self._envelope_response(
+            agent="ADMIN_INSIGHTS",
+            status="OK",
+            flags=[],
+            user_message=f"The current {metric_name} is {val} (measured over the past 30 days).",
+            data={
+                "kind": "METRIC",
+                "metric": metric_name,
+                "overall": {"value": val, "unit": r.get("unit", "ratio")},
+                "suppressed_groups": 0,
+                "data_quality": {"ok": True, "notes": []},
+                "items": [],
+                "recommendations": [],
+            },
+        )
+
     def _handle_guard(self, user_msg: str) -> FakeChatCompletion:
+
         low = user_msg.lower()
         labels = []
         blocked_spans = []

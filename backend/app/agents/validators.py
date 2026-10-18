@@ -90,6 +90,10 @@ def validate_envelope(agent: str, env: Envelope, ctx: Any) -> None:
         _validate_fitness(env, ctx)
     elif agent_upper == "TRAINER_INFO":
         _validate_trainer_info(env, ctx)
+    elif agent_upper == "TRAINER_OPS":
+        _validate_trainer_ops(env, ctx)
+    elif agent_upper == "ADMIN_INSIGHTS":
+        _validate_admin_insights(env, ctx)
 
 
 def _validate_schedule(env: Envelope, ctx: Any) -> None:
@@ -293,4 +297,62 @@ def _validate_trainer_info(env: Envelope, ctx: Any) -> None:
     lower_msg = env.user_message.lower()
     if any(k in lower_msg for k in ("will lose", "guaranteed", "promise you", "lose 10 kg")):
         raise ValueError("TRAINER_INFO: user_message must not promise health or physical outcomes")
+
+
+def _validate_trainer_ops(env: Envelope, ctx: Any) -> None:
+    import json
+    session = getattr(ctx, "session", None)
+    if session and getattr(session, "role", "") != "TRAINER":
+        if env.status != "REFUSED":
+            raise ValueError("TRAINER_OPS: Non-trainer role must be REFUSED")
+
+    # Invariant: Never reveal attendee health data, medical metrics, intake or injuries
+    user_msg_lower = env.user_message.lower()
+    data = env.data if isinstance(env.data, dict) else env.data.model_dump() if hasattr(env.data, "model_dump") else {}
+    data_str = json.dumps(data).lower()
+    
+    health_leak_terms = ["medical history", "blood pressure", "par-q", "attendee injury", "member health profile", "heart condition"]
+    if any(term in user_msg_lower or term in data_str for term in health_leak_terms):
+        raise ValueError("TRAINER_OPS: attendee health and intake data must never be revealed")
+
+    if env.status == "NEEDS_CONFIRMATION":
+        if not env.confirmation.action_id:
+            raise ValueError("TRAINER_OPS: NEEDS_CONFIRMATION requires confirmation.action_id")
+        if not env.confirmation.summary:
+            raise ValueError("TRAINER_OPS: NEEDS_CONFIRMATION requires confirmation.summary")
+
+
+def _validate_admin_insights(env: Envelope, ctx: Any) -> None:
+    import json
+    session = getattr(ctx, "session", None)
+    if session and getattr(session, "role", "") != "ADMIN":
+        if env.status != "REFUSED":
+            raise ValueError("ADMIN_INSIGHTS: Non-admin role must be REFUSED")
+
+    flags_set = set(env.safety.flags)
+    user_msg_lower = env.user_message.lower()
+
+    # Invariant: THERE IS NO TOOL FOR ADMIN-ROLE REQUESTS
+    if "PRIVILEGE_ESCALATION" in flags_set and env.status != "REFUSED":
+        raise ValueError("ADMIN_INSIGHTS: PRIVILEGE_ESCALATION must result in REFUSED status")
+
+    # Invariant: Never output individual member health metrics, intake or per-member attendance
+    data = env.data if isinstance(env.data, dict) else env.data.model_dump() if hasattr(env.data, "model_dump") else {}
+    data_str = json.dumps(data).lower()
+    if any(k in user_msg_lower or k in data_str for k in ["member_intake", "individual attendance", "medical intake", "par-q"]):
+        raise ValueError("ADMIN_INSIGHTS: individual member health or intake data must never be revealed")
+
+    # Invariant: Cooling-off active blocks admin proposals
+    cooling_off = getattr(session, "cooling_off_active", False) if session else False
+    if cooling_off and env.status == "NEEDS_CONFIRMATION":
+        conf_summary = (env.confirmation.summary or "").lower()
+        if any(term in conf_summary for term in ["invite", "trainer request", "grant membership", "broadcast"]):
+            raise ValueError("ADMIN_INSIGHTS: sensitive actions are blocked during cooling-off")
+
+    if env.status == "NEEDS_CONFIRMATION":
+        if not env.confirmation.action_id:
+            raise ValueError("ADMIN_INSIGHTS: NEEDS_CONFIRMATION requires confirmation.action_id")
+        if not env.confirmation.summary:
+            raise ValueError("ADMIN_INSIGHTS: NEEDS_CONFIRMATION requires confirmation.summary")
+
 

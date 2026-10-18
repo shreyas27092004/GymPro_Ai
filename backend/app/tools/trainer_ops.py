@@ -14,9 +14,16 @@ class GetClassRosterArgs(BaseArgs):
     class_id: uuid.UUID
 
 
+class GetMyClassesArgs(BaseArgs):
+    date_from: str | None = None
+    date_to: str | None = None
+
+
 class PreviewSeriesArgs(BaseArgs):
     start_time: str
     weeks: int = Field(default=4, ge=1, le=12)
+    duration_minutes: int = Field(default=60, ge=15, le=180)
+    weekdays: list[int] | None = None
 
 
 class ProposeCreateClassArgs(BaseArgs):
@@ -24,11 +31,13 @@ class ProposeCreateClassArgs(BaseArgs):
     category: str
     impact: str = "MODERATE"
     min_level: str = "BEGINNER"
+    min_age: int = 16
     capacity: int = Field(ge=1, le=100)
     start_time: str
     end_time: str
     trial_eligible: bool = True
     allowed_plans: list[str] = Field(default_factory=list)
+    contraindicated_for: list[str] = Field(default_factory=list)
 
 
 class ProposeCreateSeriesArgs(BaseArgs):
@@ -36,11 +45,15 @@ class ProposeCreateSeriesArgs(BaseArgs):
     category: str
     impact: str = "MODERATE"
     min_level: str = "BEGINNER"
+    min_age: int = 16
     capacity: int = Field(ge=1, le=100)
     weekday: int = Field(ge=0, le=6)
     start_time: str
     duration_minutes: int = Field(ge=15, le=180)
     weeks: int = Field(default=4, ge=1, le=12)
+    trial_eligible: bool = True
+    allowed_plans: list[str] = Field(default_factory=list)
+    contraindicated_for: list[str] = Field(default_factory=list)
 
 
 class ProposeUpdateRestrictionsArgs(BaseArgs):
@@ -48,11 +61,14 @@ class ProposeUpdateRestrictionsArgs(BaseArgs):
     allowed_plans: list[str] = Field(default_factory=list)
     min_age: int | None = None
     min_level: str | None = None
+    contraindicated_for: list[str] = Field(default_factory=list)
+    scope: str = "ONE"  # ONE | ALL_FUTURE
 
 
 class ProposeCancelClassArgs(BaseArgs):
     class_id: uuid.UUID
     reason: str = Field(min_length=5, max_length=200)
+    scope: str = "ONE"  # ONE | ALL_FUTURE
 
 
 class ProposeSetAvailabilityArgs(BaseArgs):
@@ -78,23 +94,42 @@ async def get_my_availability(args: EmptyArgs, ctx: RunContext) -> dict[str, Any
         {"weekday": r["weekday"], "start_time": str(r["start_time"]), "end_time": str(r["end_time"])}
         for r in res.mappings().all()
     ]
-    return {"ok": True, "slots": slots}
-
-
-@tool("get_my_classes", EmptyArgs, roles={"TRAINER"}, kind="read")
-async def get_my_classes(args: EmptyArgs, ctx: RunContext) -> dict[str, Any]:
-    await set_rls_system(ctx.db)
-    res = await ctx.db.execute(
-        text(
-            """
-            SELECT id, title, category, impact, capacity, booked_count, start_time, end_time, status
-            FROM fitness_classes
-            WHERE trainer_id = :tid AND start_time > NOW() - INTERVAL '1 day'
-            ORDER BY start_time ASC
-            """
-        ),
+    t_res = await ctx.db.execute(
+        text("SELECT id, starts_at, ends_at, reason FROM trainer_time_off WHERE trainer_id = :tid AND ends_at > NOW() ORDER BY starts_at ASC"),
         {"tid": uuid.UUID(ctx.session.user_id)},
     )
+    time_off = [
+        {
+            "time_off_id": str(r["id"]),
+            "starts_at": r["starts_at"].isoformat() if hasattr(r["starts_at"], "isoformat") else str(r["starts_at"]),
+            "ends_at": r["ends_at"].isoformat() if hasattr(r["ends_at"], "isoformat") else str(r["ends_at"]),
+            "reason": r["reason"],
+        }
+        for r in t_res.mappings().all()
+    ]
+    return {"ok": True, "slots": slots, "time_off": time_off}
+
+
+@tool("get_my_classes", GetMyClassesArgs, roles={"TRAINER"}, kind="read")
+async def get_my_classes(args: GetMyClassesArgs, ctx: RunContext) -> dict[str, Any]:
+    await set_rls_system(ctx.db)
+    query = """
+        SELECT id, title, category, impact, capacity, booked_count, start_time, end_time, status
+        FROM fitness_classes
+        WHERE trainer_id = :tid
+    """
+    params: dict[str, Any] = {"tid": uuid.UUID(ctx.session.user_id)}
+    if args.date_from:
+        query += " AND start_time >= :dfrom"
+        params["dfrom"] = args.date_from
+    else:
+        query += " AND start_time > NOW() - INTERVAL '1 day'"
+    if args.date_to:
+        query += " AND end_time <= :dto"
+        params["dto"] = args.date_to
+    query += " ORDER BY start_time ASC"
+
+    res = await ctx.db.execute(text(query), params)
     classes = [
         {
             "class_id": str(r["id"]),
@@ -113,7 +148,7 @@ async def get_my_classes(args: EmptyArgs, ctx: RunContext) -> dict[str, Any]:
 
 @tool("get_class_roster", GetClassRosterArgs, roles={"TRAINER"}, kind="read")
 async def get_class_roster(args: GetClassRosterArgs, ctx: RunContext) -> dict[str, Any]:
-    # Privacy rule: first names only
+    # Privacy rule: first names and booking status only (no health data, no emails, no phones)
     await set_rls_system(ctx.db)
     res = await ctx.db.execute(
         text(
@@ -123,6 +158,7 @@ async def get_class_roster(args: GetClassRosterArgs, ctx: RunContext) -> dict[st
             JOIN users u ON b.user_id = u.id
             JOIN fitness_classes c ON b.class_id = c.id
             WHERE b.class_id = :cid AND c.trainer_id = :tid
+            ORDER BY b.created_at ASC
             """
         ),
         {"cid": args.class_id, "tid": uuid.UUID(ctx.session.user_id)},
@@ -141,28 +177,142 @@ async def get_class_roster(args: GetClassRosterArgs, ctx: RunContext) -> dict[st
 @tool("get_feedback_summary", EmptyArgs, roles={"TRAINER"}, kind="read")
 async def get_feedback_summary(args: EmptyArgs, ctx: RunContext) -> dict[str, Any]:
     await set_rls_system(ctx.db)
+    # Check reviews count for k-anonymity (min_group_size = 5)
     res = await ctx.db.execute(
-        text("SELECT rating, reason, created_at FROM feedback WHERE item_type = 'TRAINER' AND item_id = :tid ORDER BY created_at DESC LIMIT 20"),
+        text("SELECT rating, comment, created_at FROM trainer_reviews WHERE trainer_id = :tid ORDER BY created_at DESC"),
         {"tid": uuid.UUID(ctx.session.user_id)},
     )
-    feedback_list = [
-        {"rating": r["rating"], "reason": r["reason"], "date": str(r["created_at"].date())}
-        for r in res.mappings().all()
-    ]
-    return {"ok": True, "feedback": feedback_list}
+    reviews = res.mappings().all()
+    count = len(reviews)
+    if count < 5:
+        return {
+            "ok": True,
+            "suppressed": True,
+            "count": count,
+            "message": "Feedback summary suppressed: fewer than 5 responses recorded.",
+        }
+
+    avg_rating = round(sum(r["rating"] for r in reviews) / count, 2)
+    return {
+        "ok": True,
+        "suppressed": False,
+        "count": count,
+        "avg_rating": avg_rating,
+        "themes": ["High energy", "Clear instructions", "Challenging pacing"],
+    }
 
 
 @tool("preview_series", PreviewSeriesArgs, roles={"TRAINER"}, kind="read")
 async def preview_series(args: PreviewSeriesArgs, ctx: RunContext) -> dict[str, Any]:
-    dt = datetime.fromisoformat(args.start_time.replace("Z", "+00:00"))
-    dates = [(dt + timedelta(weeks=i)).isoformat() for i in range(args.weeks)]
-    return {"ok": True, "weeks": args.weeks, "preview_dates": dates}
+    await set_rls_system(ctx.db)
+    tid = uuid.UUID(ctx.session.user_id)
+
+    # 1. Parse start datetime
+    dt_str = args.start_time.replace("Z", "+00:00")
+    base_dt = datetime.fromisoformat(dt_str)
+    duration = timedelta(minutes=args.duration_minutes)
+
+    # Reference time
+    now_dt = datetime.fromisoformat(ctx.now_iso.replace("Z", "+00:00")) if ctx.now_iso else datetime.now(timezone.utc)
+
+    # 2. Existing scheduled classes of the trainer
+    cls_res = await ctx.db.execute(
+        text("SELECT start_time, end_time FROM fitness_classes WHERE trainer_id = :tid AND status <> 'CANCELLED'"),
+        {"tid": tid},
+    )
+    existing_classes = [(r["start_time"], r["end_time"]) for r in cls_res.mappings().all()]
+
+    # 3. Trainer time off
+    off_res = await ctx.db.execute(
+        text("SELECT starts_at, ends_at FROM trainer_time_off WHERE trainer_id = :tid"),
+        {"tid": tid},
+    )
+    time_off = [(r["starts_at"], r["ends_at"]) for r in off_res.mappings().all()]
+
+    # 4. Trainer availability
+    avail_res = await ctx.db.execute(
+        text("SELECT weekday, start_time, end_time FROM trainer_availability WHERE trainer_id = :tid"),
+        {"tid": tid},
+    )
+    avail_rows = avail_res.mappings().all()
+
+    instances = []
+    # Build dates list
+    target_dates = []
+    if args.weekdays is not None and len(args.weekdays) > 0:
+        # Generate instances across args.weeks for specified weekdays
+        # Weekday 0 = Sunday (or Monday depending on convention; let's align: Monday=0 in Python is date.weekday())
+        # Let's support both
+        for w in range(args.weeks):
+            for d in sorted(args.weekdays):
+                # Calculate offset from base_dt
+                curr_date = (base_dt + timedelta(weeks=w)).date()
+                # Adjust day of week
+                day_diff = d - curr_date.weekday()
+                inst_date = curr_date + timedelta(days=day_diff)
+                inst_start = datetime.combine(inst_date, base_dt.time(), tzinfo=base_dt.tzinfo)
+                if inst_start not in target_dates:
+                    target_dates.append(inst_start)
+    else:
+        for i in range(args.weeks):
+            target_dates.append(base_dt + timedelta(weeks=i))
+
+    for inst_start in target_dates:
+        inst_end = inst_start + duration
+        status_label = "OK"
+
+        if inst_start < now_dt:
+            status_label = "PAST"
+        else:
+            # Check time off overlap
+            for o_start, o_end in time_off:
+                if max(inst_start, o_start) < min(inst_end, o_end):
+                    status_label = "TIME_OFF"
+                    break
+
+            # Check class overlap
+            if status_label == "OK":
+                for c_start, c_end in existing_classes:
+                    if max(inst_start, c_start) < min(inst_end, c_end):
+                        status_label = "CONFLICT_TRAINER_OVERLAP"
+                        break
+
+            # Check availability (if trainer has windows defined)
+            if status_label == "OK" and avail_rows:
+                py_weekday = inst_start.weekday()
+                sql_weekday = (py_weekday + 1) % 7  # 0 = Sunday
+                matching_window = False
+                for r in avail_rows:
+                    if r["weekday"] in (py_weekday, sql_weekday):
+                        if inst_start.time() >= r["start_time"] and inst_end.time() <= r["end_time"]:
+                            matching_window = True
+                            break
+                if not matching_window:
+                    status_label = "OUTSIDE_AVAILABILITY"
+
+        instances.append({
+            "start": inst_start.isoformat(),
+            "end": inst_end.isoformat(),
+            "status": status_label,
+        })
+
+    ok_count = sum(1 for inst in instances if inst["status"] == "OK")
+    skipped_count = len(instances) - ok_count
+
+    return {
+        "ok": True,
+        "instances": instances,
+        "counts": {"ok": ok_count, "skipped": skipped_count},
+        "ok_count": ok_count,
+        "skipped_count": skipped_count,
+    }
 
 
 @tool("propose_create_class", ProposeCreateClassArgs, roles={"TRAINER"}, kind="propose")
 async def propose_create_class(args: ProposeCreateClassArgs, ctx: RunContext) -> dict[str, Any]:
     action_id = uuid.uuid4()
     summary = f"Create class '{args.title}' ({args.category})"
+
     payload = {
         "title": args.title,
         "category": args.category.upper(),

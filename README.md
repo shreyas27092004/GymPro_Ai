@@ -156,6 +156,12 @@ cd backend
 .\venv\Scripts\pytest.exe tests/evals -k "fitness or trainer_info or support or comms or kb_injection" -q
 ```
 
+Run Phase P11 staff copilots gate tests:
+```powershell
+cd backend
+.\venv\Scripts\pytest.exe tests/evals -k "trainer_ops or admin_insights" -q
+```
+
 Run frontend build & tests:
 ```powershell
 cd frontend
