@@ -8,8 +8,8 @@ from ..prompts import load_prompt
 from ..settings import settings
 
 INJECTION_HINTS = re.compile(
-    r"(ignore\s+(all\s+|any\s+|previous\s+|prior\s+|your\s+)?(instructions|rules)|"
-    r"you\s+are\s+now|system\s+prompt|developer\s+message|"
+    r"(ignore\s+((all|any|previous|prior|your)\s+)*(instructions|rules)|"
+    r"you\s+are\s+now|system\s+prompt|developer\s+message|prompt\s+template|"
     r"act\s+as\s+(admin|root)|reveal\s+your\s+(prompt|instructions)|disregard)",
     re.I,
 )
@@ -166,13 +166,8 @@ async def input_guard(query: str, session: SessionContext) -> dict[str, Any]:
         route = "REFUSE"
         severity = "LOW"
     elif "PROMPT_INJECTION" in labels_set:
-        # If it's a direct injection attack (e.g. "ignore your rules..."), refuse
-        if re.search(r"ignore\s+(all\s+|any\s+|previous\s+|your\s+)?rules|you\s+are\s+admin", query, re.I):
-            route = "REFUSE"
-            severity = "HIGH"
-        else:
-            route = "CONTINUE"
-            severity = "LOW"
+        route = "REFUSE"
+        severity = "HIGH"
     else:
         route = "CONTINUE"
         severity = "NONE"

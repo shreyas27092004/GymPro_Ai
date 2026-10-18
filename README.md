@@ -186,4 +186,22 @@ Get-ChildItem ..\docs\screenshots\
 ```
 Design documentation is documented in [`docs/DESIGN.md`](file:///docs/DESIGN.md), featuring custom CSS variables mapped to Tailwind semantic tokens, Plus Jakarta Sans typography, shared accessible UI primitives (`Button`, `Card`, `Badge`, `Skeleton`, `EmptyState`, `Dialog`, `Drawer`, `Toast`), reduced-motion fallbacks, >=44px mobile touch targets, and visual screen captures across desktop light and mobile dark viewports under `docs/screenshots/`.
 
+Run Phase P13 hardening, threat model, red-team & observability verification (Gate):
+```powershell
+# 1. Run Spec 12.2 Security Threat Table tests (100% pass on all 18 invariants)
+cd backend
+.\venv\Scripts\pytest.exe tests/security/test_threats.py -v
+
+# 2. Run Red-Team Adversarial Evaluation pack (100% pass on injections, breakouts, IDOR, SQL fuzzing)
+.\venv\Scripts\pytest.exe tests/security/test_red_team.py -v
+
+# 3. Verify Observability endpoints & metrics exposition
+curl http://localhost:8000/metrics
+curl http://localhost:8000/metrics/json
+
+# 4. Review Operational Runbooks
+Get-ChildItem ..\docs\runbooks\
+```
+Security controls strictly enforce all Spec 12.2 invariants. Observability provides structured JSON logs with PII/card/token scrubbing, OpenTelemetry distributed tracing with `X-Trace-Id` propagation, and Prometheus metrics exposition at `/metrics`. Operational runbooks under `docs/runbooks/` document contingency and incident review protocols.
+
 

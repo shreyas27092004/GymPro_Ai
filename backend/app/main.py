@@ -1,12 +1,21 @@
 # app/main.py
-from fastapi import FastAPI, status
+import time
+from fastapi import FastAPI, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from .auth.admin_router import admin_router
 from .auth.router import router as auth_router
 from .entitlements.router import router as entitlements_router
 from .executor import executor_router
 from .orchestrator.router import router as orchestrator_router
 from .payments import router as payments_router
+from .observability import (
+    setup_logging,
+    trace_span,
+    get_current_trace_id,
+    record_request,
+    metrics,
+)
 from .settings import settings
 
 app = FastAPI(
@@ -15,11 +24,38 @@ app = FastAPI(
     version="0.1.0",
 )
 
-# Startup verification
+
+# Startup verification and observability setup
 @app.on_event("startup")
 async def startup_check():
+    setup_logging()
     if settings.env == "production" and settings.payments_mode == "mock":
         raise RuntimeError("PAYMENTS_MODE=mock is not allowed when ENV=production")
+
+
+class ObservabilityMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        start_time = time.perf_counter()
+        method = request.method
+        path = request.url.path
+
+        with trace_span(f"HTTP {method} {path}", attributes={"http.method": method, "http.target": path}):
+            trace_id = get_current_trace_id()
+            try:
+                response = await call_next(request)
+            except Exception as e:
+                duration = time.perf_counter() - start_time
+                record_request(method, path, 500, duration)
+                raise e
+
+            duration = time.perf_counter() - start_time
+            record_request(method, path, response.status_code, duration)
+            if trace_id:
+                response.headers["X-Trace-Id"] = trace_id
+            return response
+
+
+app.add_middleware(ObservabilityMiddleware)
 
 # CORS middleware
 app.add_middleware(
@@ -69,3 +105,15 @@ async def ready():
         "llm_provider": settings.llm_provider,
     }
     return readiness
+
+
+@app.get("/metrics", status_code=status.HTTP_200_OK, tags=["System"])
+async def get_metrics():
+    """Exposes Prometheus format metrics."""
+    return Response(content=metrics.to_prometheus_format(), media_type="text/plain; version=0.0.4")
+
+
+@app.get("/metrics/json", status_code=status.HTTP_200_OK, tags=["System"])
+async def get_metrics_json():
+    """Exposes JSON aggregated metrics."""
+    return metrics.get_summary()

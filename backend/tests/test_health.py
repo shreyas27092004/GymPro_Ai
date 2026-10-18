@@ -47,3 +47,24 @@ def test_rate_limiter_sliding_window():
 
     # 4th call within same window should fail
     assert limiter.check(key, limit, window_s) is False
+
+
+@pytest.mark.asyncio
+async def test_metrics_prometheus_and_json(client: AsyncClient):
+    """Verify Prometheus exposition and JSON metrics endpoints."""
+    # Hit health to generate metrics
+    res = await client.get("/health")
+    assert "x-trace-id" in res.headers or "X-Trace-Id" in res.headers
+
+    # Check /metrics text exposition
+    metrics_res = await client.get("/metrics")
+    assert metrics_res.status_code == 200
+    assert "gympro_requests_total" in metrics_res.text
+
+    # Check /metrics/json
+    json_res = await client.get("/metrics/json")
+    assert json_res.status_code == 200
+    summary = json_res.json()
+    assert "requests_total" in summary
+    assert "status_distribution" in summary
+

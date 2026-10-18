@@ -3,6 +3,7 @@ import asyncio
 import datetime
 import hashlib
 import json
+import pathlib
 import subprocess
 import time
 import uuid
@@ -376,7 +377,12 @@ async def test_smtp_outage_drill(db_session: AsyncSession, amqp_channel):
     6. Retry delivery -> succeeds, records SENT in email_log, sanitizes outbox tokens.
     7. Query Mailpit: exactly 1 email received, 0 lost, 0 duplicates!
     """
-    mailpit_exe = "..\\tools\\mailpit.exe"
+    candidates = [
+        pathlib.Path("tools/mailpit.exe"),
+        pathlib.Path("../tools/mailpit.exe"),
+        pathlib.Path(__file__).resolve().parents[3] / "tools" / "mailpit.exe",
+    ]
+    mailpit_exe = next((str(p) for p in candidates if p.exists()), "tools/mailpit.exe")
     email_addr = "outage_drill@gympro.test"
 
     # Create active user
