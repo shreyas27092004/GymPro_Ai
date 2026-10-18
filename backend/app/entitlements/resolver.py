@@ -67,8 +67,13 @@ async def classes_used_this_cycle(db: AsyncSession, user_id: uuid.UUID, start_da
 def _get_class_attr(cls: Any, attr: str, default: Any = None) -> Any:
     if cls is None:
         return default
-    if isinstance(cls, dict):
+    if hasattr(cls, "get"):
         return cls.get(attr, default)
+    if hasattr(cls, "__getitem__"):
+        try:
+            return cls[attr]
+        except Exception:
+            pass
     return getattr(cls, attr, default)
 
 

@@ -120,6 +120,12 @@ cd backend
 .\venv\Scripts\pytest.exe tests/entitlements -q
 ```
 
+Run Phase P6 executors gate tests:
+```powershell
+cd backend
+.\venv\Scripts\pytest.exe tests/executor -q
+```
+
 Run frontend build & tests:
 ```powershell
 cd frontend
