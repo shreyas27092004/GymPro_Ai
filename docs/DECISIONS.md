@@ -92,5 +92,14 @@ This document records architectural decisions, resolutions of ambiguities, and i
 - **P6b-5 (Raw Bytes Webhook HMAC & Event Deduplication):** `POST /api/payments/razorpay/webhook` strictly reads raw request body bytes for SHA-256 HMAC verification before any JSON deserialization. Unique `X-Razorpay-Event-Id` headers are inserted into `payment_events` with `ON CONFLICT DO NOTHING`, discarding duplicate deliveries safely.
 - **P6b-6 (Production Guard):** Server refuses to start if `ENV=production` and `PAYMENTS_MODE=mock` (verified at Pydantic settings initialization and FastAPI startup).
 
+## Phase P7 Decisions
+- **P7-1 (Declarative Invariant Scans & Tool Safety):** System enforces by automated reflection scan: (1) no tool has `kind="write"`, only `read`, `calc`, `propose`; (2) no tool accepts caller identity arguments (`user_id`, `actor_id`, `recipient`, `from_user`, etc.) which are strictly injected from authenticated `ctx.session`; (3) all tools declare explicit role authorization sets.
+- **P7-2 (Strict Extra Attributes & Pydantic Validation):** All tool parameter schemas inherit from `BaseArgs` with `ConfigDict(extra="forbid")`. Dispatcher parses and strictly validates arguments, rejecting unexpected arguments before invoking tool logic.
+- **P7-3 (Declarative Health Consent Gating):** Tools accessing sensitive biometric, injury, or diet profiles (`get_my_intake`, `get_my_health_profile`, `get_my_nutrition_inputs`) declare `needs_health_consent=True`. Dispatcher checks `ctx.session.health_data_consent` and immediately refuses execution if consent is not granted (`CONSENT_REQUIRED`), protecting user privacy before any database query runs.
+- **P7-4 (Admin Cooling-Off Protection in Tool Registry):** Tools performing privileged modifications (`propose_decide_trainer_request`, `propose_verify_trainer`, `propose_broadcast`, `propose_invite_staff`) declare `restricted_cooling_off=True`. If `ctx.session.is_cooling_off` is true, the tool call is rejected (`ACTION_BLOCKED_COOLING_OFF`).
+- **P7-5 (Deterministic Calculators):** Metabolic and training formulas are executed strictly as deterministic Python calculators (Mifflin-St Jeor BMR, activity multipliers for TDEE, WHO BMI bands, hydration baseline, Epley 1RM with progressive overload increments, and exact macronutrient caloric distributions obeying the 4/4/9 kcal rule) rather than delegating arithmetic to LLM generation.
+- **P7-6 (Allergen Fail-Closed Filtering):** `find_foods` matches food allergens against the member's recorded profile. If a food item contains any recorded allergy or cannot be verified safe, it is excluded (`fail-closed`).
+- **P7-7 (No Recipient Injection in Comms):** `propose_send_email` rejects any caller-specified email address. The recipient is unconditionally resolved from `ctx.session.email` (or `users.email`), preventing arbitrary outbound mail relay.
+
 
 

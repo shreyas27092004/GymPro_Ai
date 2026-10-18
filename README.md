@@ -132,6 +132,12 @@ cd backend
 .\venv\Scripts\pytest.exe tests/payments -q
 ```
 
+Run Phase P7 tool layer gate tests:
+```powershell
+cd backend
+.\venv\Scripts\pytest.exe tests/tools -q
+```
+
 Run frontend build & tests:
 ```powershell
 cd frontend

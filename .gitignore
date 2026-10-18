@@ -62,5 +62,5 @@ pnpm-debug.log*
 Thumbs.db
 
 # Binaries & local tools
-tools/
+/tools/
 *.exe
