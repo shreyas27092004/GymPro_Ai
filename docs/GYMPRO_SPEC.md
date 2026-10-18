@@ -1,12 +1,12 @@
-# GymPro AI: Build Specification for Antigravity (v4.1)
+# GymPro AI: Build Specification for Antigravity (v4.2)
 ### Multi-agent Gen AI gym platform. Roles: User, Trainer, Admin. One self-contained file: agent build brief, locked decisions, full DDL, versioned prompt suite, tool layer, reference code, evals, and a phased build plan with gates
 
 | Item | Value |
 | :--- | :--- |
-| Version | 4.1 (build-ready, single file) |
+| Version | 4.2 (build-ready, single file; adds Razorpay payments) |
 | Date | 18 Oct 2026 |
 | Audience | An autonomous coding agent (Google Antigravity) building from an empty workspace. Start at section 0 |
-| Stack | React 18 + TypeScript (Vite), FastAPI, PostgreSQL 15+, ChromaDB, LangGraph, RabbitMQ, SMTP (Mailpit in development), Ollama / Azure OpenAI / OpenAI. No Docker |
+| Stack | React 18 + TypeScript (Vite), FastAPI, PostgreSQL 15+, ChromaDB, LangGraph, RabbitMQ, SMTP (Mailpit in development), Razorpay payments, Ollama / Azure OpenAI / OpenAI. No Docker |
 | Status | Complete design for a greenfield build. Section 19 gives the phases and the gate for each |
 
 ## Table of contents
@@ -78,7 +78,7 @@ This file is long. Do not load it blindly into every step.
 | 9 | Account state | `account_status` only (no `is_active`). Login succeeds only when `ACTIVE` |
 | 10 | Tokens | Access JWT (RS256, 15 min) plus opaque refresh token (7 days) with rotation and reuse detection |
 | 11 | Trial | 3 classes within 14 days, once per person. Checked at proposal and again at execution |
-| 12 | Payments | Mock provider in development. In production, paid changes stay blocked (`PAYMENT_PROVIDER_REQUIRED`) until a real provider exists |
+| 12 | Payments | **Razorpay** (Orders API plus Checkout) behind a provider adapter, test keys in development, live keys in production. A `mock` mode (instant success) exists for tests and keyless demos and is refused in production. Details in section 8.15 |
 | 13 | Downgrades | Staff-handled at renewal. No downgrade tool in v1 |
 | 14 | Bundles | Not atomic across steps. Each step runs in its own transaction. A failed step skips its dependents; independent steps still run |
 | 15 | Admin activation | One-time code goes to **every** active admin. Any one may share it (no quorum). Cooling-off 24 h. Admin MFA is recommended, not required, in v1 |
@@ -88,8 +88,9 @@ This file is long. Do not load it blindly into every step.
 | 19 | Voice | Browser speech APIs (speech to text, text to speech). Voice never confirms an action |
 | 20 | Rate limiting | An in-process limiter behind a small interface (`check(key, limit, window_s)`) so Redis can replace it later. Fine for a single API worker |
 | 21 | Vector store | ChromaDB persistent client with its default embedding function (the first run downloads a small model). KB content is the starter corpus described in section 11 |
-| 22 | Currency | Seed plans use `USD`. Change `membership_plans.currency` and prices in the seed script if a local currency is wanted. Code must never assume a currency |
+| 22 | Currency | Seed plans use **INR** (Silver 999, Gold 1999, Platinum 3499 per month). Money is stored as `NUMERIC` and sent to Razorpay as integer paise. Code must never assume a currency |
 | 23 | Database migrations | One authoritative `backend/db/schema.sql` plus `backend/db/seed_dev.sql`. No Alembic in v1 |
+| 24 | Money rules | One payment per action; `finalize_paid` is the only place a paid change activates; refunds are issued by staff in the Razorpay dashboard and recorded from webhooks; renewals are user-initiated (no auto-debit in v1) |
 
 ### 0.4 Definition of done (whole project)
 
@@ -138,7 +139,7 @@ GymPro is a gym platform where every important action can be done **by typing or
 
 ### 1.4 Out of scope for v1
 
-Real payment gateway (mock payment in development; paid changes blocked in production until a provider is integrated), medical diagnosis, native mobile apps, wearable integrations (listed as ideas in section 18).
+Automated refunds and auto-debit subscriptions (refunds are issued by staff in the Razorpay dashboard; each plan change is a one-time Razorpay order), medical diagnosis, native mobile apps, wearable integrations (listed as ideas in section 18).
 
 ### 1.5 Five-minute demo script
 
@@ -167,6 +168,7 @@ Real payment gateway (mock payment in development; paid changes blocked in produ
 | **Orchestration** | LangGraph (`StateGraph`, no checkpointer in v1) | Typed state and waves. The confirmation boundary is the database (`pending_actions`, `action_bundles`), so no graph interrupt or checkpointer is needed |
 | **Messaging** | RabbitMQ (topic exchange, DLX, retry queues) via `aio-pika` | Transactional outbox, publisher confirms, manual acks |
 | **Email** | SMTP via `aiosmtplib`. Dev: Mailpit (local binary). Prod: provider with SPF, DKIM, DMARC | Transactional separate from marketing |
+| **Payments** | Razorpay Orders API and Checkout.js via `httpx`, behind a `PaymentProvider` adapter (`mock` for tests) | Amounts in paise, HMAC-verified signatures and webhooks, idempotent finalization, reconciler job. See section 8.15 |
 | **Observability** | OpenTelemetry + structured JSON logs (+ Langfuse or Phoenix optional) | Trace per request: prompt versions, tool calls, tokens, latency, validator results |
 | **Voice** | Browser Web Speech API for speech-to-text and `speechSynthesis` for text-to-speech | **Not offline** in Chrome and Edge (audio goes to the vendor). Swap to a local Whisper endpoint for offline |
 
@@ -178,7 +180,7 @@ Real payment gateway (mock payment in development; paid changes blocked in produ
 | `outbox-relay` | Reads `notification_outbox`, publishes to RabbitMQ with confirms |
 | `email-worker` | Consumes `q.email`, renders templates, sends SMTP, writes `email_log` |
 | `notify-worker` | Consumes `q.notify`, writes in-app `notifications` |
-| `digest-worker` | Consumes `q.digest` and runs the scheduler (daily digest, reminders, expiry jobs) |
+| `digest-worker` | Consumes `q.digest` and runs the scheduler (daily digest, reminders, expiry jobs, **payment reconciliation every minute**) |
 | `agent-async-worker` (optional) | Consumes `q.agent.async` for long agent jobs |
 
 ---
@@ -312,17 +314,18 @@ The user's real `role` stays at USER-level (no privileges) until the request is 
 | Plans | SILVER, GOLD, PLATINUM. Prices and perks live only in `membership_plans` |
 | Perk examples | Class credits per month or unlimited, PT sessions, nutrition consultation, spa, priority booking window |
 | Upgrade | Choose a higher plan. **The old membership is ended and replaced.** Prorated charge shown before confirming |
+| Payment | After the user confirms, the app opens a secure **Razorpay Checkout** window for the prorated amount. The plan changes only after the payment is verified by the server (section 8.15) |
 | Downgrade | Takes effect at renewal, handled by staff in v1 |
 | "Highest plan" | Resolved by the tool `get_highest_plan` as the plan with the greatest `sort_order`, then shown to the user for confirmation |
 | Entitlement order | Active membership credits first; trial grant only when no active membership and the class is trial eligible |
 
-**Seed plans** (example values, prices come from the table at runtime):
+**Seed plans** (INR; prices come from the table at runtime):
 
 | Plan | Price / month | Group classes / month | PT sessions / month | Nutrition consult | Spa |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| SILVER | 39.00 | 4 | 0 | No | No |
-| GOLD | 79.00 | Unlimited | 2 | No | No |
-| PLATINUM | 129.00 | Unlimited | 5 | Yes | Yes |
+| SILVER | 999.00 | 4 | 0 | No | No |
+| GOLD | 1999.00 | Unlimited | 2 | No | No |
+| PLATINUM | 3499.00 | Unlimited | 5 | Yes | Yes |
 
 ### 4.5 Intake and personalization
 
@@ -529,6 +532,7 @@ flowchart TB
 11. **Agents can only email the user's own verified account address.** No free-form marketing.
 12. **Privilege changes only through `role_requests`.** Admin requests are never approvable by an agent.
 13. **Safety paths work without an LLM.** Guards, escalation and refusal are deterministic so an LLM outage cannot disable them.
+14. **Money moves only through the payment adapter, after a tap on Confirm.** Agents never see card, UPI or bank data. A paid change becomes real only in `finalize_paid` after server-side signature verification (section 8.15).
 
 ### 5.3 Request lifecycle
 
@@ -578,8 +582,9 @@ CREATE TYPE action_type AS ENUM (
   -- ADMIN (note: there is deliberately NO action type for approving an admin-role request)
   'ADMIN_VERIFY_TRAINER','ADMIN_DECIDE_TRAINER_REQUEST','ADMIN_BROADCAST','ADMIN_MESSAGE_USER',
   'ADMIN_GRANT_MEMBERSHIP','ADMIN_INVITE_STAFF','ADMIN_UPDATE_ISSUE');
-CREATE TYPE action_status       AS ENUM ('PENDING','CONFIRMED','EXECUTED','EXPIRED','REJECTED','FAILED','SKIPPED','CANCELLED');
-CREATE TYPE bundle_status       AS ENUM ('PENDING','CONFIRMING','EXECUTED','PARTIAL','FAILED','EXPIRED','REJECTED');
+CREATE TYPE action_status       AS ENUM ('PENDING','CONFIRMED','AWAITING_PAYMENT','EXECUTED','EXPIRED','REJECTED','FAILED','SKIPPED','CANCELLED');
+CREATE TYPE bundle_status       AS ENUM ('PENDING','CONFIRMING','AWAITING_PAYMENT','EXECUTED','PARTIAL','FAILED','EXPIRED','REJECTED');
+CREATE TYPE payment_status      AS ENUM ('CREATED','PAID','FAILED','EXPIRED','NEEDS_REVIEW','REFUNDED','PARTIALLY_REFUNDED');
 CREATE TYPE issue_category      AS ENUM ('CLASS_QUALITY','TRAINER_CONDUCT','FACILITY','SAFETY','HARASSMENT','INJURY','BILLING','OTHER');
 CREATE TYPE issue_severity      AS ENUM ('LOW','MEDIUM','HIGH','URGENT');
 CREATE TYPE issue_status        AS ENUM ('NEW','IN_REVIEW','ACTIONED','CLOSED');
@@ -609,6 +614,7 @@ INSERT INTO gym_settings (key, value) VALUES
   ('issue_reports_per_day',        '5'),
   ('bundle_max_steps',             '5'),
   ('email_daily_cap_per_user',     '10'),
+  ('payment_order_ttl_min',        '15'),
   ('require_verified_trainer_for_publish', 'false');
 ```
 
@@ -847,15 +853,15 @@ CREATE TABLE membership_plans (
     display_name    VARCHAR(50) NOT NULL,
     price_monthly   NUMERIC(10,2) NOT NULL CHECK (price_monthly >= 0),
     price_annual    NUMERIC(10,2),
-    currency        CHAR(3) NOT NULL DEFAULT 'USD',
+    currency        CHAR(3) NOT NULL DEFAULT 'INR',
     perks           JSONB NOT NULL,                      -- {"group_classes_per_month": 4|null, "pt_sessions_per_month": 0, ...}
     sort_order      INT NOT NULL UNIQUE,                 -- "highest plan" = greatest sort_order
     is_active       BOOLEAN NOT NULL DEFAULT TRUE
 );
 INSERT INTO membership_plans (code, display_name, price_monthly, perks, sort_order) VALUES
- ('SILVER',   'Silver',   39.00,  '{"group_classes_per_month":4,"pt_sessions_per_month":0,"nutrition_consult":false,"spa":false,"priority_booking_hours":0}', 1),
- ('GOLD',     'Gold',     79.00,  '{"group_classes_per_month":null,"pt_sessions_per_month":2,"nutrition_consult":false,"spa":false,"priority_booking_hours":12}', 2),
- ('PLATINUM', 'Platinum', 129.00, '{"group_classes_per_month":null,"pt_sessions_per_month":5,"nutrition_consult":true,"spa":true,"priority_booking_hours":24}', 3);
+ ('SILVER',   'Silver',   999.00,  '{"group_classes_per_month":4,"pt_sessions_per_month":0,"nutrition_consult":false,"spa":false,"priority_booking_hours":0}', 1),
+ ('GOLD',     'Gold',     1999.00,  '{"group_classes_per_month":null,"pt_sessions_per_month":2,"nutrition_consult":false,"spa":false,"priority_booking_hours":12}', 2),
+ ('PLATINUM', 'Platinum', 3499.00, '{"group_classes_per_month":null,"pt_sessions_per_month":5,"nutrition_consult":true,"spa":true,"priority_booking_hours":24}', 3);
 
 CREATE TABLE memberships (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1022,6 +1028,40 @@ CREATE TABLE pending_actions (
     UNIQUE (bundle_id, step_no)
 );
 CREATE INDEX idx_pending_user ON pending_actions (user_id, status, expires_at);
+
+-- Payments (Razorpay). Money in minor units (paise for INR). No card or UPI data is ever stored.
+CREATE TABLE payments (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id             UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,   -- financial records are kept; accounts are soft-deleted
+    action_id           UUID NOT NULL UNIQUE REFERENCES pending_actions(id),     -- one payment per confirmed action
+    provider            VARCHAR(12) NOT NULL CHECK (provider IN ('RAZORPAY','MOCK','NONE')),
+    purpose             VARCHAR(20) NOT NULL DEFAULT 'PLAN_CHANGE',              -- PLAN_CHANGE | PLAN_RENEWAL
+    amount_minor        BIGINT NOT NULL CHECK (amount_minor >= 0),
+    currency            CHAR(3) NOT NULL,
+    status              payment_status NOT NULL DEFAULT 'CREATED',
+    razorpay_order_id   VARCHAR(40) UNIQUE,
+    razorpay_payment_id VARCHAR(40) UNIQUE,
+    quote               JSONB NOT NULL,                                          -- from_plan, to_plan, cycle, prorated total, next_billing_date
+    membership_id       UUID REFERENCES memberships(id),                         -- set when activated
+    attempts            INT NOT NULL DEFAULT 0,                                  -- payment.failed events seen
+    refunded_minor      BIGINT NOT NULL DEFAULT 0 CHECK (refunded_minor >= 0),
+    failure_code        VARCHAR(40),
+    expires_at          TIMESTAMPTZ NOT NULL,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    paid_at             TIMESTAMPTZ,
+    CONSTRAINT chk_refund_le_amount CHECK (refunded_minor <= amount_minor)
+);
+CREATE INDEX idx_payments_open ON payments (status, created_at) WHERE status = 'CREATED';
+CREATE INDEX idx_payments_user ON payments (user_id, created_at DESC);
+
+-- Webhook deduplication: Razorpay sends a unique event id header with every delivery
+CREATE TABLE payment_events (
+    event_id    VARCHAR(80) PRIMARY KEY,
+    event       VARCHAR(60) NOT NULL,
+    order_id    VARCHAR(40),
+    payload     JSONB NOT NULL,
+    received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 ```
 
 ### 6.9 Issue reports
@@ -1231,6 +1271,13 @@ ALTER TABLE notifications          FORCE ROW LEVEL SECURITY;
 ALTER TABLE trial_grants           FORCE ROW LEVEL SECURITY;
 ALTER TABLE issue_reports          FORCE ROW LEVEL SECURITY;
 ALTER TABLE feedback               FORCE ROW LEVEL SECURITY;
+
+-- Payments: owner reads own rows; ADMIN reads for the review queue; writes only as SYSTEM (executor, webhook, reconciler)
+ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE payments FORCE ROW LEVEL SECURITY;
+CREATE POLICY own_rows   ON payments FOR SELECT USING (user_id = nullif(current_setting('app.user_id', true), '')::uuid);
+CREATE POLICY admin_read ON payments FOR SELECT USING (current_setting('app.role', true) = 'ADMIN');
+CREATE POLICY system_all ON payments USING (current_setting('app.role', true) = 'SYSTEM');
 ```
 
 ### 6.14 Roles and grants (least privilege)
@@ -1254,6 +1301,7 @@ GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO gympro_app;
 REVOKE UPDATE, DELETE ON audit_log FROM gympro_app;
 REVOKE UPDATE, DELETE ON member_intake_versions FROM gympro_app;
 REVOKE UPDATE, DELETE ON email_log FROM gympro_app;
+REVOKE DELETE ON payments, payment_events FROM gympro_app;
 
 -- gympro_app : API, workers, executors
 -- gympro_analytics : SELECT only on analytics views (v_*), statement_timeout = 5s, used by ADMIN_INSIGHTS tools
@@ -1543,15 +1591,17 @@ RULES
  7. No scarcity or pressure tactics unless a tool returns a real, dated promotion.
  8. Refunds, billing disputes, payment methods, tax questions, legal terms -> ESCALATE to human support;
     never promise a refund.
- 9. Never collect or repeat card numbers or banking details. In development payments are mocked; in production a
-    paid change returns PAYMENT_PROVIDER_REQUIRED and you say it is not available yet.
+ 9. Never collect or repeat card, UPI or banking details. After the user taps Confirm, the app opens a secure Razorpay
+    window; say so in confirmation.summary (for example "You will be asked to pay in a secure window"). You never
+    start, verify or discuss a payment itself. If a paid change returns PAYMENT_PROVIDER_REQUIRED, say payments are
+    not available yet.
  10. Always return projected_effects when you propose a change, so later steps (SCHEDULE) can plan against it.
 
 DATA SCHEMA
 {
   "current": {"plan":"GOLD","status":"ACTIVE","end_date":"2026-12-01","auto_renew":true},
   "trial": {"active":false,"classes_remaining":0,"expires_at":null},
-  "comparison": [{"plan":"PLATINUM","delta_per_cycle":50.0,"currency":"USD","gains":[],"unused_by_you":[]}],
+  "comparison": [{"plan":"PLATINUM","delta_per_cycle":1500.0,"currency":"INR","gains":[],"unused_by_you":[]}],
   "recommendation": "STAY|UPGRADE|NONE",
   "evidence": ["attended 14 classes last 30 days"],
   "proposed_action_id": "uuid|null",
@@ -1560,15 +1610,15 @@ DATA SCHEMA
 
 EXAMPLE (upgrade to highest)
 <user_message>upgrade my plan to the highest</user_message>
-(tools: get_highest_plan -> PLATINUM; get_my_membership -> GOLD; price_diff -> delta 50.00, prorated_today 31.50, next billing 2026-11-16; propose_plan_change)
+(tools: get_highest_plan -> PLATINUM; get_my_membership -> GOLD; price_diff -> delta 1500.00, prorated_today 945.00, next billing 2026-11-16; propose_plan_change)
 {"agent":"MEMBERSHIP","schema_version":"1.0","status":"NEEDS_CONFIRMATION",
  "data":{"current":{"plan":"GOLD","status":"ACTIVE","end_date":"2026-11-16","auto_renew":true},
  "trial":{"active":false,"classes_remaining":0,"expires_at":null},
- "comparison":[{"plan":"PLATINUM","delta_per_cycle":50.0,"currency":"USD","gains":["5 PT sessions per month","nutrition consultation","spa"],"unused_by_you":[]}],
+ "comparison":[{"plan":"PLATINUM","delta_per_cycle":1500.0,"currency":"INR","gains":["5 PT sessions per month","nutrition consultation","spa"],"unused_by_you":[]}],
  "recommendation":"UPGRADE","evidence":[],"proposed_action_id":"b21...","replaces_membership":true},
  "projected_effects":{"plan_after":"PLATINUM","effective":"on_confirm","entitlements_after":{"classes_remaining":null,"pt_remaining":5}},
- "user_message":"Platinum is your highest plan. It replaces Gold today and adds 5 PT sessions, a nutrition consult and spa. You pay 31.50 now, then 129.00 per month from 16 Nov.",
- "missing_fields":[],"confirmation":{"action_id":"b21...","summary":"Upgrade Gold to Platinum. Gold ends today. Pay 31.50 USD now (prorated), then 129.00 USD per month from 16 Nov 2026.","expires_at":"2026-10-16T18:15:00+05:30"},
+ "user_message":"Platinum is your highest plan. It replaces Gold today and adds 5 PT sessions, a nutrition consult and spa. You pay 945.00 now, then 3499.00 per month from 16 Nov.",
+ "missing_fields":[],"confirmation":{"action_id":"b21...","summary":"Upgrade Gold to Platinum. Gold ends today. Pay 945.00 INR now (prorated), then 3499.00 INR per month from 16 Nov 2026.","expires_at":"2026-10-16T18:15:00+05:30"},
  "safety":{"flags":[],"escalation":null},"citations":[{"source":"tool","ref":"get_highest_plan"},{"source":"tool","ref":"price_diff"}],"confidence":0.96}
 ```
 ---
@@ -2303,7 +2353,7 @@ A bundle is **built by the server** from validated agent envelopes. The client n
   "headline": "Upgrade plan, book Zumba, email details",
   "expires_at": "2026-10-16T18:15:00+05:30",
   "steps": [
-    {"step_no": 1, "type": "CHANGE_PLAN", "summary": "Upgrade Gold to Platinum. Gold ends today. Pay 31.50 USD now...", "depends_on": []},
+    {"step_no": 1, "type": "CHANGE_PLAN", "summary": "Upgrade Gold to Platinum. Gold ends today. Pay 945.00 INR now...", "depends_on": []},
     {"step_no": 2, "type": "BOOK_CLASS", "summary": "Book Zumba Fusion, Sat 17 Oct 10:00-11:00 AM. Included in your plan.", "depends_on": [1], "conditional_note": "Goes ahead once step 1 succeeds"},
     {"step_no": 3, "type": "SEND_BOOKING_EMAIL", "summary": "Email booking details with a calendar file to a***@gmail.com after step 2 succeeds.", "depends_on": [2]}
   ],
@@ -2393,7 +2443,7 @@ RULES
 | `BOOK_CLASS` | Per-user advisory lock, class row lock, status and time, conflicts, entitlements (membership first, trial second), class rules, capacity. Consumes a credit or a trial class. Enqueues `email.booking` |
 | `CANCEL_BOOKING` | Ownership, late-cancel rule, refunds the credit or trial class if not late, promotes the oldest eligible waitlisted member in the same transaction |
 | `JOIN_WAITLIST` | Active-booking uniqueness, FIFO sequence |
-| `CHANGE_PLAN` | Plan active, price re-computed (must equal the confirmed price within 0.01 or fail with `PRICE_CHANGED`), mock payment (dev) or `PAYMENT_PROVIDER_REQUIRED` (prod), old membership set to `REPLACED`, new membership `ACTIVE` |
+| `CHANGE_PLAN` | Plan active, price re-computed (must equal the confirmed price within 0.01 or fail with `PRICE_CHANGED`), payment through the provider adapter (`mock`: instant; `razorpay`: order created and the step pauses as `AWAITING_PAYMENT` until the payment is verified, section 8.15), old membership set to `REPLACED`, new membership `ACTIVE` |
 | `SEND_BOOKING_EMAIL` | `requires_step` executed, recipient equals the account email (read at execution), daily cap, enqueues outbox |
 | `SUBMIT_ISSUE_REPORT` | Ownership of the class booking, daily cap, severity floor, inserts `issue_reports`, alerts admins (immediately for SAFETY, HARASSMENT, INJURY) |
 | `CREATE_CLASS`, `CREATE_CLASS_SERIES` | Trainer owns it, availability, time off, overlap constraint, creates only OK instances |
@@ -2484,8 +2534,13 @@ class Settings(BaseSettings):
     smtp_user: str | None = None
     smtp_password: str | None = None
     mail_from: str = "GymPro <no-reply@gympro.local>"
-    payments_mode: Literal["mock", "disabled"] = "mock"  # production requires a real provider before paid changes
+    payments_mode: Literal["mock", "razorpay", "disabled"] = "mock"   # production must not use "mock" (startup check)
+    razorpay_key_id: str | None = None                  # public, sent to the browser
+    razorpay_key_secret: str | None = None              # server only
+    razorpay_webhook_secret: str | None = None          # server only
 
+if settings.env == "production" and settings.payments_mode == "mock":
+    raise RuntimeError("PAYMENTS_MODE=mock is not allowed when ENV=production")
 settings = Settings()
 ```
 
@@ -2810,6 +2865,9 @@ async def run_action(db, s, action) -> dict:
         result = {"ok": False, "error": "FORBIDDEN"}
     else:
         result = await handler(db, s, action)                             # may return a business error
+    if result.get("awaiting"):                                            # payment pending: neither executed nor failed
+        action.status, action.result = "AWAITING_PAYMENT", result
+        return result
     action.status = "EXECUTED" if result["ok"] else "FAILED"
     action.result, action.executed_at = result, utcnow()
     db.add(AuditLog(actor_id=s.user_id, action=f"EXEC_{action.type}", entity="pending_actions", entity_id=action.id))
@@ -2853,12 +2911,20 @@ async def exec_change_plan(db, s, action):
     if not plan or not plan.is_active:
         return {"ok": False, "error": "PLAN_UNAVAILABLE"}
     quote = await price_diff(db, s.user_id, p.to_plan, p.cycle)            # recomputed now
-    if abs(quote.prorated_today - p.confirmed_total) > 0.01:
+    if abs(quote.prorated_today - p.confirmed_total) > Decimal("0.01"):
         return {"ok": False, "error": "PRICE_CHANGED", "new_total": quote.prorated_today}
-    pay = await charge(s.user_id, quote.prorated_today)                    # mock in dev; PAYMENT_PROVIDER_REQUIRED in production
-    if not pay.ok:
-        return {"ok": False, "error": pay.error}
+    pay = await payments.begin(db, s, action, quote)                        # section 8.15
+    if pay.state == "AWAITING":                                             # Razorpay: the browser must pay first
+        return {"ok": None, "awaiting": pay.checkout}                       # action -> AWAITING_PAYMENT, bundle pauses
+    if pay.state != "PAID":
+        return {"ok": False, "error": pay.error}                            # PAYMENT_PROVIDER_REQUIRED and similar
+    return await activate_plan(db, s, p, quote, pay.id)
+
+async def activate_plan(db, s, p, quote, payment_id):
+    """Swap the membership. Shared by the mock path and finalize_paid, so there is exactly one implementation."""
     old = await active_membership(db, s.user_id, for_update=True)
+    if (old.plan_code if old else None) != quote.from_plan:                 # the user's plan changed since the quote
+        return {"ok": False, "error": "CONFLICT"}
     new = Membership(user_id=s.user_id, plan_code=p.to_plan, status="ACTIVE", billing_cycle=p.cycle,
                      price_paid=quote.prorated_today, end_date=quote.next_billing_date)
     if old:
@@ -2866,6 +2932,7 @@ async def exec_change_plan(db, s, action):
     db.add(new); await db.flush()
     if old:
         old.replaced_by = new.id
+    await link_payment_to_membership(db, payment_id, new.id)
     await enqueue(db, user_id=s.user_id, routing_key="email.plan", template="PLAN_CHANGED",
                   params={"plan": p.to_plan}, dedupe_key=f"plan:{new.id}")
     return {"ok": True, "membership_id": str(new.id), "plan": p.to_plan}
@@ -2978,14 +3045,20 @@ async def confirm_bundle(bundle_id: UUID, s: SessionContext = Depends(get_sessio
         if not bundle or str(bundle.user_id) != s.user_id:
             raise HTTPException(404)
         if bundle.status != "PENDING":
-            return await stored_results(db, bundle)                          # idempotent replay
+            return await stored_results(db, bundle)                          # idempotent replay; for AWAITING_PAYMENT it returns the open checkout
         if bundle.expires_at < utcnow():
             bundle.status = "EXPIRED"
             raise HTTPException(409, "ACTION_EXPIRED")
         bundle.status = "CONFIRMING"                                         # transient guard (set via a short commit in real code)
+    return await run_bundle_steps(db, s, bundle_id)
+
+async def run_bundle_steps(db, s, bundle_id):
+    """Runs or RESUMES a bundle in step order. Steps already finished are not repeated."""
     steps = await load_steps(db, bundle_id)                                  # ordered by step_no
-    done: dict[int, str] = {}
+    done = {st.step_no: st.status for st in steps if st.status in ("EXECUTED", "FAILED", "SKIPPED")}
     for st in steps:
+        if st.step_no in done:
+            continue
         if any(done.get(d) != "EXECUTED" for d in st.depends_on):
             await mark(db, st.id, "SKIPPED", {"ok": False, "error": "DEPENDENCY_FAILED"})
             done[st.step_no] = "SKIPPED"; continue
@@ -2993,11 +3066,21 @@ async def confirm_bundle(bundle_id: UUID, s: SessionContext = Depends(get_sessio
             await set_rls(db, s.user_id, s.role)
             action = await lock_action(db, st.id)
             result = await run_action(db, s, action)                         # re-validates everything inside
+        if result.get("awaiting"):                                           # pause: finalize_paid / finalize_unpaid will resume
+            await set_bundle_status(db, bundle_id, "AWAITING_PAYMENT")
+            return {"status": "AWAITING_PAYMENT", "payment": result["awaiting"], "steps": await step_results(db, bundle_id)}
         done[st.step_no] = "EXECUTED" if result["ok"] else "FAILED"
     statuses = set(done.values())
     final = "EXECUTED" if statuses == {"EXECUTED"} else "FAILED" if "EXECUTED" not in statuses else "PARTIAL"
     await finish_bundle(db, bundle_id, final)
     return {"status": final, "steps": await step_results(db, bundle_id)}
+
+async def resume_bundle(db, bundle_id, s):
+    await set_bundle_status(db, bundle_id, "CONFIRMING")
+    return await run_bundle_steps(db, s, bundle_id)
+
+async def set_bundle_status(db, bundle_id, status):
+    await db.execute(update(ActionBundle).where(ActionBundle.id == bundle_id).values(status=status))
 ```
 
 ### 8.11 Orchestrator (LangGraph)
@@ -3366,6 +3449,226 @@ async def activate_admin(db, email: str, password: str, code: str, ip: str):
 
 **Rate limit helper:** implement `app/ratelimit.py` as an in-process limiter behind `check(key, limit, window_s)`, acceptable for a single API worker. A Redis implementation can replace it later without touching callers. All limits above are per IP and per email as stated in the flows.
 
+### 8.15 Payments (Razorpay)
+
+Money moves only after the user taps Confirm, only through the deterministic executor, and only through a provider adapter. Agents never see, collect or discuss card, UPI or bank details. The browser talks to Razorpay Checkout directly, so no payment instrument data ever reaches this system.
+
+**Modes** (`PAYMENTS_MODE`)
+
+| Mode | Behavior |
+| :--- | :--- |
+| `mock` | Development and most tests. Payment succeeds instantly inside the executor. **The API refuses to start with `ENV=production` and `mock`.** |
+| `razorpay` | Real flow with Razorpay **test keys** in development and **live keys** in production. Uses the Orders API and Checkout. |
+| `disabled` | Any paid change fails with `PAYMENT_PROVIDER_REQUIRED`. Free actions still work. |
+
+**Flow for a paid plan change (mode `razorpay`)**
+
+```mermaid
+sequenceDiagram
+    participant U as Browser (Coach or Membership page)
+    participant API as FastAPI
+    participant X as Executor
+    participant R as Razorpay
+    participant DB as PostgreSQL
+    U->>API: POST /bundles/{id}/confirm
+    API->>X: step 1 CHANGE_PLAN: recompute quote, create payments row
+    X->>R: POST /v1/orders (amount in paise, receipt = payments.id)
+    R-->>X: order_id
+    X->>DB: action AWAITING_PAYMENT, bundle AWAITING_PAYMENT
+    API-->>U: {status: AWAITING_PAYMENT, payment: {key_id, order_id, amount_minor, currency}}
+    U->>R: Checkout.js (user pays in Razorpay's window)
+    R-->>U: payment_id + signature
+    U->>API: POST /payments/razorpay/verify
+    API->>API: verify HMAC signature, same user, same order
+    API->>DB: finalize_paid: membership swapped, receipt email queued
+    API->>X: resume bundle: booking, then email (dependents run now)
+    API-->>U: per-step results
+    R-->>API: webhook payment.captured (fallback, idempotent)
+```
+
+**Rules**
+
+1. **Amounts are integers in minor units** (paise for INR). Convert from `Decimal` with `ROUND_HALF_UP`. Never use floats for money.
+2. **The quote is re-computed at execution** and must equal the confirmed total, otherwise `PRICE_CHANGED`. The Razorpay order is created for exactly that amount. `price_diff` applies the minimum charge (1.00 INR when the total is above zero), so the card shows what will actually be charged. A zero total skips the provider (`provider = NONE`).
+3. **One payment per action** (`payments.action_id` is unique). Replaying confirm returns the same open order. Never create a second order for the same action.
+4. **A payment is final only through `finalize_paid`**, which is idempotent and is the single place that activates the membership. Three callers can reach it: the verify endpoint, the webhook, and the reconciler. Whichever arrives first wins; the others see the payment already finalized.
+5. **`payment.failed` is not terminal.** Razorpay lets the user retry inside the same order. Record the attempt and wait. A payment ends as failed only when the order expires, the user cancels, or the provider reports no successful payment after expiry.
+6. **Late or odd money goes to `NEEDS_REVIEW`**, never to silent activation: a capture arriving after expiry, an activation that no longer applies (the user's current plan changed in the meantime), or an amount or currency mismatch. Alert admins (`PAYMENT_NEEDS_REVIEW` email) so staff can refund in the Razorpay dashboard.
+7. **Refunds are issued by staff in the Razorpay dashboard** in v1. The `refund.processed` webhook updates `refunded_minor` and the payment status. No agent or tool can start a refund; refund requests escalate to human support (MEMBERSHIP rule 8).
+8. **Renewals** (`RENEW_PLAN`) use the same flow with `purpose = PLAN_RENEWAL`. `auto_renew` only drives reminders in v1 (no auto-debit; Razorpay Subscriptions are deferred).
+9. **Only `RAZORPAY_KEY_ID` reaches the browser.** The key secret and the webhook secret exist only in the server environment and are never logged.
+10. **Expiry:** an order lives `payment_order_ttl_min` (default 15 minutes). While a step is `AWAITING_PAYMENT`, the payment expiry governs and the action and bundle `expires_at` are ignored.
+
+**Provider adapter**
+
+```python
+# app/payments/provider.py
+import hashlib, hmac, httpx
+from typing import Protocol
+from decimal import Decimal, ROUND_HALF_UP
+from ..settings import settings
+
+def to_minor(amount: Decimal) -> int:                                   # INR 945.00 -> 94500 paise
+    return int((amount * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+class PaymentProvider(Protocol):
+    async def create_order(self, *, amount_minor: int, currency: str, receipt: str, notes: dict) -> dict: ...
+    def verify_checkout_signature(self, order_id: str, payment_id: str, signature: str) -> bool: ...
+    def verify_webhook(self, raw_body: bytes, signature: str) -> bool: ...
+    async def list_order_payments(self, order_id: str) -> list[dict]: ...
+
+class RazorpayProvider:
+    BASE = "https://api.razorpay.com/v1"
+
+    def _client(self) -> httpx.AsyncClient:
+        return httpx.AsyncClient(auth=(settings.razorpay_key_id, settings.razorpay_key_secret), timeout=10.0)
+
+    async def create_order(self, *, amount_minor, currency, receipt, notes):
+        async with self._client() as c:
+            r = await c.post(f"{self.BASE}/orders", json={"amount": amount_minor, "currency": currency,
+                                                          "receipt": receipt, "notes": notes})
+            r.raise_for_status()
+            return r.json()                                             # contains "id" (order_id)
+
+    def verify_checkout_signature(self, order_id, payment_id, signature) -> bool:
+        expected = hmac.new(settings.razorpay_key_secret.encode(), f"{order_id}|{payment_id}".encode(),
+                            hashlib.sha256).hexdigest()
+        return hmac.compare_digest(expected, signature or "")
+
+    def verify_webhook(self, raw_body: bytes, signature: str) -> bool:    # raw bytes, never re-serialized JSON
+        expected = hmac.new(settings.razorpay_webhook_secret.encode(), raw_body, hashlib.sha256).hexdigest()
+        return hmac.compare_digest(expected, signature or "")
+
+    async def list_order_payments(self, order_id):
+        async with self._client() as c:
+            r = await c.get(f"{self.BASE}/orders/{order_id}/payments"); r.raise_for_status()
+            return r.json().get("items", [])
+
+provider: PaymentProvider = RazorpayProvider()                          # tests inject FakeProvider (same Protocol)
+```
+
+**Starting a charge (called from `exec_change_plan`, section 8.9)**
+
+```python
+# app/payments/service.py
+async def begin(db, s, action, quote) -> "PayState":
+    mode = settings.payments_mode
+    if mode == "disabled" or (settings.env == "production" and mode == "mock"):
+        return PayState("FAILED", error="PAYMENT_PROVIDER_REQUIRED")
+    if (existing := await payment_for_action(db, action.id)):          # replay-safe: one payment per action
+        return existing.as_state()
+    amount_minor = to_minor(quote.prorated_today)
+    pay = Payment(user_id=s.user_id, action_id=action.id, purpose="PLAN_CHANGE", amount_minor=amount_minor,
+                  currency=quote.currency, quote=quote.model_dump(mode="json"),
+                  expires_at=utcnow() + timedelta(minutes=await setting_int(db, "payment_order_ttl_min")))
+    if amount_minor == 0 or mode == "mock":
+        pay.provider, pay.status, pay.paid_at = ("NONE" if amount_minor == 0 else "MOCK"), "PAID", utcnow()
+        db.add(pay); await db.flush()
+        return PayState("PAID", id=pay.id)
+    pay.provider = "RAZORPAY"; db.add(pay); await db.flush()           # pay.id exists now
+    order = await provider.create_order(amount_minor=amount_minor, currency=quote.currency,
+                                        receipt=pay.id.hex, notes={"action_id": str(action.id)})
+    pay.razorpay_order_id = order["id"]
+    return PayState("AWAITING", id=pay.id, checkout={
+        "payment_id": str(pay.id), "key_id": settings.razorpay_key_id, "order_id": order["id"],
+        "amount_minor": amount_minor, "currency": quote.currency, "description": action.summary[:120],
+        "expires_at": pay.expires_at.isoformat()})
+```
+
+**Finalizing (the only place a paid plan change becomes real)**
+
+```python
+async def finalize_paid(db, order_id: str, provider_payment_id: str, source: str) -> dict:
+    """Idempotent. source: VERIFY | WEBHOOK | RECONCILER. Runs as SYSTEM inside one transaction."""
+    async with db.begin():
+        await set_rls(db, None, "SYSTEM")
+        pay = await lock_payment_by_order(db, order_id)                 # SELECT ... FOR UPDATE
+        if pay is None:
+            return {"ok": False, "error": "UNKNOWN_ORDER"}
+        if pay.status == "PAID":
+            return {"ok": True, "replay": True}
+        if pay.status in ("EXPIRED", "FAILED", "NEEDS_REVIEW"):         # money arrived too late: never activate silently
+            pay.status, pay.razorpay_payment_id = "NEEDS_REVIEW", provider_payment_id
+            await alert_admins(db, "PAYMENT_NEEDS_REVIEW", {"payment_id": str(pay.id)})
+            return {"ok": False, "error": "PAYMENT_NEEDS_REVIEW"}
+        pay.status, pay.razorpay_payment_id, pay.paid_at = "PAID", provider_payment_id, utcnow()
+        action = await lock_action(db, pay.action_id)
+        s = await session_for_user(db, pay.user_id)                     # role and status re-read from the database
+        p = ChangePlanPayload.model_validate(action.payload)
+        quote = Quote.model_validate(pay.quote)
+        result = await activate_plan(db, s, p, quote, pay.id)           # same function the mock path uses
+        if not result["ok"]:                                            # for example the user's plan changed meanwhile
+            pay.status = "NEEDS_REVIEW"
+            await alert_admins(db, "PAYMENT_NEEDS_REVIEW", {"payment_id": str(pay.id)})
+        action.status, action.result, action.executed_at = ("EXECUTED" if result["ok"] else "FAILED"), result, utcnow()
+        await enqueue(db, user_id=pay.user_id, routing_key="email.payment", template="PAYMENT_RECEIPT",
+                      params={"payment_id": str(pay.id)}, dedupe_key=f"receipt:{pay.id}")
+        bundle_id = action.bundle_id
+    if bundle_id:
+        await resume_bundle(db, bundle_id, s)                           # runs the remaining steps; dependents skipped on failure
+    return {"ok": result["ok"]}
+
+async def finalize_unpaid(db, payment_id, code: str):                  # EXPIRED or CANCELLED by the user
+    ...  # lock payment, set status FAILED or EXPIRED with failure_code, action FAILED (error=code), resume_bundle
+```
+
+**Endpoints**
+
+```python
+# app/payments/api.py
+@router.post("/api/payments/razorpay/verify")                           # authenticated; called by Checkout's success handler
+async def verify(body: VerifyBody, s=Depends(get_session), db=Depends(get_db),
+                 _=Depends(rate_limit("pay-verify", 10, 600))):
+    pay = await payment_by_order_for_user(db, body.razorpay_order_id, s.user_id)   # another user's order -> 404
+    if not pay or not provider.verify_checkout_signature(body.razorpay_order_id, body.razorpay_payment_id, body.razorpay_signature):
+        await audit(db, s.user_id, "PAYMENT_SIGNATURE_INVALID", "payments", pay.id if pay else None)
+        raise HTTPException(400, "PAYMENT_SIGNATURE_INVALID")
+    await finalize_paid(db, body.razorpay_order_id, body.razorpay_payment_id, "VERIFY")
+    return await payment_state_with_steps(db, pay.id)                  # status plus bundle step results
+
+@router.post("/api/payments/razorpay/webhook")                          # public, authenticated by signature only
+async def webhook(request: Request, db=Depends(get_db)):
+    raw = await request.body()
+    if not provider.verify_webhook(raw, request.headers.get("X-Razorpay-Signature", "")):
+        raise HTTPException(400, "PAYMENT_SIGNATURE_INVALID")
+    event_id = request.headers.get("X-Razorpay-Event-Id")
+    if not event_id or not await record_event_once(db, event_id, json.loads(raw)):   # INSERT ... ON CONFLICT DO NOTHING
+        return {"ok": True}                                             # duplicate delivery
+    await handle_event(db, json.loads(raw))   # payment.captured and order.paid -> finalize_paid
+                                              # payment.failed -> attempts += 1 only (not terminal)
+                                              # refund.processed -> refunded_minor, REFUNDED / PARTIALLY_REFUNDED
+    return {"ok": True}                                                 # always 200 after a valid signature
+```
+
+Also required: `GET /api/payments/{id}` (own payment: status and, while open, the checkout object so the client can reopen it) and `POST /api/payments/{id}/cancel` (user abandons: calls `finalize_unpaid(..., "PAYMENT_CANCELLED")`).
+
+**Reconciler** (runs every minute inside `digest-worker`, as SYSTEM). For each payment in `CREATED` older than 2 minutes, call `provider.list_order_payments(order_id)`; if any item is captured, call `finalize_paid(..., "RECONCILER")`. For each `CREATED` payment past `expires_at` with no captured item, call `finalize_unpaid(..., "PAYMENT_EXPIRED")`. This makes the system correct even when webhooks cannot reach a laptop.
+
+**Executor changes.** `run_action` treats a result containing `awaiting` as `AWAITING_PAYMENT` (neither executed nor failed). The bundle executor pauses on it and returns the checkout object; `resume_bundle` re-enters `run_bundle_steps`, which skips steps already finished (section 8.10). Confirming a bundle whose status is `AWAITING_PAYMENT` returns the open checkout instead of an error.
+
+**Local development without a public URL.** Razorpay cannot reach `localhost`. Either expose the API with a tunnel (ngrok or cloudflared) and register the webhook URL and secret in the Razorpay test dashboard, or skip webhooks: the verify endpoint and the reconciler complete payments on their own. Use Razorpay's published test cards and UPI IDs from its test-mode documentation.
+
+**Tests (all with `FakeProvider`, no network)**
+
+| Test | Expectation |
+| :--- | :--- |
+| Order amount | Equals `to_minor(prorated_today)`; receipt equals the payment id; one order per action even if confirm is replayed |
+| Valid signature | Membership replaced, receipt email queued, dependent booking and email steps run |
+| Tampered signature or another user's order | 400 `PAYMENT_SIGNATURE_INVALID` or 404; nothing activated |
+| Verify twice, then webhook, then reconciler | Exactly one membership, one receipt, one booking |
+| Webhook with bad signature, forged body, replayed event id | 400, 400 (no state change), 200 with no second effect |
+| Payment expires | Action `FAILED` (`PAYMENT_EXPIRED`), dependents `SKIPPED`, independent steps still run |
+| User cancels in Checkout | Action `FAILED` (`PAYMENT_CANCELLED`), dependents skipped |
+| `payment.failed` then a successful retry | Attempt counted, then success activates normally |
+| Capture arrives after expiry | `NEEDS_REVIEW`, no activation, admin alert |
+| Plan changed between order and payment | `NEEDS_REVIEW`, no double activation |
+| `ENV=production` with `PAYMENTS_MODE=mock` | Process refuses to start |
+| `PAYMENTS_MODE=disabled` | `PAYMENT_PROVIDER_REQUIRED`, no `payments` row |
+| Key secret and webhook secret | Never present in any API response, log line or frontend bundle |
+| Optional `@live` test | One real test-mode order, paid with Razorpay's test credentials, verified end to end |
+
+---
+
 ---
 
 ## 9. Messaging design (RabbitMQ) and SMTP
@@ -3481,6 +3784,8 @@ async def handle(message: aio_pika.IncomingMessage):
 | `CLASS_CONFIRMED` / `BOOKING_DETAILS` | USER | Booking details, optional .ics |
 | `WAITLIST_PROMOTED` / `CLASS_REMINDER` / `CLASS_CANCELLED` | USER | Short factual notices |
 | `PLAN_CHANGED` | USER | New plan and effective date |
+| `PAYMENT_RECEIPT` | USER | Amount, currency, plan, date, payment reference (no card or UPI data) |
+| `PAYMENT_NEEDS_REVIEW` | Admins | Payment id and reason (late capture, plan changed); no user health or personal details |
 | `ISSUE_RECEIVED` | Reporter | Acknowledgement only |
 | `ISSUE_ADMIN_ALERT` | Admins | Severity, category, class label, link (no reporter identity in the email) |
 | `TRAINER_DECISION` | Trainer applicant | Approved, rejected with reason, or more information requested |
@@ -3504,7 +3809,7 @@ async def handle(message: aio_pika.IncomingMessage):
 | `/forgot`, `/reset?token=` | Public | Request and set a new password |
 | `/onboarding` | USER | Intake wizard, section by section, with the separate health-data consent step |
 | `/app` | USER | Dashboard: trial or plan card, upcoming classes, steps and calories, class calendar, nutrition and workout cards with "Based on" |
-| `/app/membership` | USER | Plans, usage, upgrade (price preview) |
+| `/app/membership` | USER | Plans, usage, upgrade (price preview, then Razorpay Checkout, section 10.4) |
 | `/app/privacy` | USER | "What the AI remembers", consent toggle, export and delete my data |
 | `/trainer` | TRAINER | Console: calendar, availability editor, series creator, roster, restrictions, feedback summary |
 | `/admin` | ADMIN | Overview KPIs, **Approvals** (trainer queue with badge, pending admin requests with reject or revoke, new-admin status), issue triage, staff, broadcasts, security log |
@@ -3701,6 +4006,51 @@ function friendlyError(e: any): string {
 | TRAINER | Weekly availability grid, time-off form, series creator with **preview list and conflict flags**, restrictions editor, roster with first names and attendance buttons, feedback summary |
 | ADMIN | KPI cards, **Approvals** (trainer queue with live badge; pending admin requests with reject or revoke; new-admin cooling-off status with suspend), issue triage board (severity sorted), staff and trainer verification, broadcast composer with audience count and preview, daily digest history, security log |
 
+### 10.4 Payment step (Razorpay Checkout)
+
+When a confirm call returns `status: AWAITING_PAYMENT`, the UI opens Razorpay Checkout using the `payment` object from the server. The browser receives only the public key id, the order id and the amount; it never sees the key secret. After a successful payment the browser sends the three values Razorpay returns to `POST /api/payments/razorpay/verify`, and the server decides everything.
+
+```tsx
+// src/payments/openCheckout.ts
+declare global { interface Window { Razorpay: any } }
+
+export type Checkout = { payment_id: string; key_id: string; order_id: string; amount_minor: number;
+                         currency: string; description: string; expires_at: string };
+
+const loadCheckout = () => new Promise<void>((resolve, reject) => {
+  if (window.Razorpay) return resolve();
+  const s = document.createElement('script');
+  s.src = 'https://checkout.razorpay.com/v1/checkout.js';
+  s.onload = () => resolve(); s.onerror = () => reject(new Error('CHECKOUT_LOAD_FAILED'));
+  document.body.appendChild(s);
+});
+
+/** Resolves with the server's verify response, or 'DISMISSED' when the user closes the window. */
+export async function openCheckout(c: Checkout, me: { name: string; email: string }) {
+  await loadCheckout();
+  return new Promise<any>((resolve) => {
+    const rzp = new window.Razorpay({
+      key: c.key_id, order_id: c.order_id, amount: c.amount_minor, currency: c.currency,
+      name: 'GymPro', description: c.description, prefill: { name: me.name, email: me.email },
+      handler: async (resp: { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string }) =>
+        resolve((await client.post('/payments/razorpay/verify', resp)).data),
+      modal: { ondismiss: () => resolve('DISMISSED'), escape: false },
+    });
+    rzp.open();
+  });
+}
+```
+
+Behavior rules:
+
+- In `confirmBundle.onSuccess` and `confirmAction.onSuccess`, check `r.status === 'AWAITING_PAYMENT'` first: mark the step "Waiting for payment", call `openCheckout(r.payment, me)`, then merge the returned step results into the card exactly as for a normal confirm.
+- If the result is `'DISMISSED'`, keep the card in a **Pay now** state. Pressing it calls `GET /payments/{id}` and reopens Checkout while the order is still valid. Offer **Cancel payment**, which calls `POST /payments/{id}/cancel`; the server then skips the dependent steps.
+- If the browser closes or the network drops after paying, the webhook or the reconciler still completes the payment. On the next load the Coach and `/app/membership` show the real state from `GET /api/me/membership` and `GET /payments/{id}`.
+- Show the amount as the server formats it (currency and minor units come from the server). Never compute prices in the client.
+- `/app/membership` uses the same `openCheckout` for a direct upgrade, after a price preview that comes from the same `price_diff` quote.
+- Voice never starts or confirms a payment. Paying is always a deliberate tap in the Checkout window.
+- Content Security Policy must allow `https://checkout.razorpay.com` for scripts and frames, and `https://api.razorpay.com` is **not** called from the browser.
+
 ---
 
 ## 11. Knowledge base (RAG) rules and starter corpus
@@ -3739,6 +4089,7 @@ Retrieval rules: top-k = 5, similarity threshold enforced, metadata filters appl
 | KB data poisoning | Reviewed ingestion pipeline, provenance metadata, read-only at runtime |
 | Voice misuse | Transcript passes the same guards; actions confirmed by tap only; no audio stored by default |
 | Cost and abuse | Per-user rate limits, per-run token budget, max tool steps, max message length, circuit breaker on the LLM provider, report caps |
+| Payment forgery and replay | HMAC verification of the Checkout signature and of the webhook body (raw bytes), webhook event-id deduplication, one payment per action, finalization only in `finalize_paid`, order bound to the authenticated user, amounts recomputed server-side, only the public key id reaches the browser |
 | Secrets | `.env` never committed; secret manager in production; rotate keys; separate DB roles |
 | Logs | PII scrubbed before storage; prompts and tool args redacted; recipient hashed; retention (for example 30 days raw, 12 months aggregated) |
 | Compliance | Data export and deletion endpoints; consent timestamps; document medical disclaimers; review against GDPR and DPDP as applicable |
@@ -3761,6 +4112,10 @@ Retrieval rules: top-k = 5, similarity threshold enforced, metadata filters appl
 | New admin in cooling-off proposes broadcast | `COOLING_OFF_ACTIVE` |
 | RLS: USER reads another user's profile | Zero rows |
 | Bundle confirm with forged step list | Ignored; only server rows run |
+| Verify with a wrong signature or another user's order | 400 `PAYMENT_SIGNATURE_INVALID` or 404; no membership change |
+| Webhook with bad signature, or the same event id twice | 400, then a single effect |
+| `ENV=production` with `PAYMENTS_MODE=mock` | Startup refused |
+| Agent or tool arguments containing card, UPI or bank details | Scrubbed from logs; MEMBERSHIP never repeats them; registry scan finds no payment-instrument fields |
 ---
 
 ## 13. Evaluation and quality gates
@@ -4056,7 +4411,10 @@ All commands are PowerShell. Nothing here needs Docker.
    SMTP_HOST=localhost
    SMTP_PORT=1025
    MAIL_FROM="GymPro <no-reply@gympro.local>"
-   PAYMENTS_MODE=mock
+   PAYMENTS_MODE=mock                 # mock | razorpay | disabled. Production must not use mock
+   RAZORPAY_KEY_ID=rzp_test_xxxxxxxx      # public key id (test keys from the Razorpay dashboard)
+   RAZORPAY_KEY_SECRET=change-me          # server only
+   RAZORPAY_WEBHOOK_SECRET=change-me      # server only; same value as in the Razorpay webhook settings
    CHROMA_PATH=./gympro_vector_store
 
    # Fully local LLM (no cloud calls from the backend):
@@ -4071,7 +4429,7 @@ All commands are PowerShell. Nothing here needs Docker.
    # LLM_API_KEY=your-key
    # LLM_MODEL=your-gpt-4o-deployment-name
    ```
-   Local models follow schemas less reliably than GPT-4o class models: keep Pydantic validation and the retry path on, and run the eval suite on whichever model you ship. Add the extra connection settings above to `Settings` in 8.3 (`test_database_url`, `seed_database_url`, `analytics_database_url`).
+   Local models follow schemas less reliably than GPT-4o class models: keep Pydantic validation and the retry path on, and run the eval suite on whichever model you ship. Add the extra connection settings above to `Settings` in 8.3 (`test_database_url`, `seed_database_url`, `analytics_database_url`). To try real payments, create a Razorpay account, copy the **test** key id and secret into `.env`, set `PAYMENTS_MODE=razorpay`, and follow the local-development note in 8.15 about webhooks.
 8. **Smoke test:** `pytest tests/db tests/auth tests/messaging -q`, then `pytest tests/evals -k "safety or schedule or bundle" -q`. Then register a user in the UI and read the verification email in Mailpit.
 
 ---
@@ -4116,7 +4474,9 @@ All commands are PowerShell. Nothing here needs Docker.
 - [ ] Rate limits (Redis or gateway), token budgets, timeouts, circuit breaker configured
 - [ ] Log redaction and retention policy applied; data export and delete endpoints
 - [ ] TLS, secrets management, backups and restore drill
-- [ ] Payment provider integrated before paid changes are enabled in production
+- [ ] Razorpay live keys and webhook secret in the secret manager; webhook URL registered over HTTPS; `PAYMENTS_MODE=razorpay`
+- [ ] Payment reconciliation job running; `NEEDS_REVIEW` queue monitored; refund runbook written (staff refund in the Razorpay dashboard)
+- [ ] A live-mode test payment and refund performed end to end before launch
 - [ ] Runbooks written (section 14)
 
 ---
@@ -4141,7 +4501,11 @@ All endpoints are under `/api`. "Active" means the caller has `account_status = 
 | `GET /me/bookings`, `GET /me/membership`, `GET /me/trial` | USER | Own data |
 | `POST /agent/chat` | Active | Text or voice transcript to the agent pipeline |
 | `POST /actions/{id}/confirm` | Active (owner) | Execute one proposed action |
-| `POST /bundles/{id}/confirm` | Active (owner) | Execute a bundle in order |
+| `POST /bundles/{id}/confirm` | Active (owner) | Execute a bundle in order; may return `AWAITING_PAYMENT` with a checkout object |
+| `POST /payments/razorpay/verify` | USER (owner of the order) | Verify the Checkout signature and finalize the payment |
+| `GET /payments/{id}`, `POST /payments/{id}/cancel` | USER (owner) | Payment status and reopen data; abandon an unpaid order |
+| `POST /payments/razorpay/webhook` | Public (HMAC signature only) | Razorpay events: captured, failed, refund processed. Deduplicated by event id |
+| `GET /admin/payments?status=NEEDS_REVIEW` | ADMIN | Review queue for late or inconsistent payments |
 | `POST /feedback` | USER | Class, trainer or answer feedback |
 | `GET /notifications`, `POST /notifications/{id}/read`, `GET /notifications/stream` | Active | In-app notices and SSE stream |
 | `GET/PUT /trainer/availability`, `POST /trainer/time-off` | TRAINER | Own availability |
@@ -4165,7 +4529,8 @@ All endpoints are under `/api`. "Active" means the caller has `account_status = 
 | `ADMIN_SIGNUP_UNAVAILABLE`, `TOO_MANY_PENDING_ADMIN_REQUESTS`, `ONE_REQUEST_PER_DAY` | Admin sign-up limits |
 | `ACTION_EXPIRED`, `PRICE_CHANGED`, `CLASS_FULL`, `CONFLICT`, `NO_ENTITLEMENT`, `RULE_FAILED`, `ALREADY_BOOKED`, `CLASS_UNAVAILABLE` | Executor business errors |
 | `DEPENDENCY_FAILED` | Bundle step skipped |
-| `PAYMENT_PROVIDER_REQUIRED` | Paid change in production without a provider |
+| `PAYMENT_PROVIDER_REQUIRED` | Payments disabled, or `mock` in production |
+| `PAYMENT_SIGNATURE_INVALID`, `PAYMENT_FAILED`, `PAYMENT_EXPIRED`, `PAYMENT_CANCELLED`, `PAYMENT_NEEDS_REVIEW` | Payment outcomes |
 | `REPORT_LIMIT_REACHED`, `EMAIL_CAP_REACHED` | Daily caps |
 | `COOLING_OFF_ACTIVE`, `FORBIDDEN`, `CONSENT_REQUIRED`, `TOOL_NOT_ALLOWED` | Authorization |
 
@@ -4200,13 +4565,13 @@ Wearable and health-app import, guest passes and referrals, family or corporate 
 
 ### 18.2 Deferred beyond v1 (decisions are locked in section 0.3)
 
-Real payment provider, authenticator-app MFA for admins, quorum for admin code release, two-person approval for risky admin actions, parallel agent execution with separate DB sessions, all-or-nothing bundles, downgrade tool, Redis rate limiting, local Whisper voice, Hindi and Kannada voice, calendar sync.
+Razorpay Subscriptions (auto-debit), automated refunds, authenticator-app MFA for admins, quorum for admin code release, two-person approval for risky admin actions, parallel agent execution with separate DB sessions, all-or-nothing bundles, downgrade tool, Redis rate limiting, local Whisper voice, Hindi and Kannada voice, calendar sync.
 
 ---
 
 ## 19. Build plan, phases and gates
 
-Build in this order. Each phase lists what to read, what to deliver and the **gate** that must pass before the next phase starts. Paths are relative to the repository root. Test folders: `backend/tests/{db,auth,messaging,roles,entitlements,executor,tools,evals,e2e}`.
+Build in this order. Each phase lists what to read, what to deliver and the **gate** that must pass before the next phase starts. Paths are relative to the repository root. Test folders: `backend/tests/{db,auth,messaging,roles,entitlements,executor,payments,tools,evals,e2e}`.
 
 ### 19.1 Phases
 
@@ -4219,13 +4584,15 @@ Build in this order. Each phase lists what to read, what to deliver and the **ga
 | **P4** | Role requests | 4.2, 4.3, 8.14 (`roles.py`), 17 (admin rows) | Trainer request queue and decisions, admin one-time code flow, seed command `python -m app.seed_admin`, cooling-off, trainer invite flow (decision 16), nightly expiry | `pytest tests/roles -q` at 100%: wrong, expired, reused code; five attempts lock; flood limits; no-admin bootstrap; at most 3 pending admin requests; cooling-off blocks restricted actions; no code path approves an admin request |
 | **P5** | Trial, entitlements, membership | 4.4, 4.5, 6.4, 6.5, 8.8 | Trial grant on verification, entitlement resolver (membership first, then trial), `price_diff`, intake endpoints with consent and `member_intake_versions` | `pytest tests/entitlements -q`: trial once per email and per phone hash, trial classes only, upgrade replaces the old membership, proration math, consent gating |
 | **P6** | Executors | 8.1 (executor table), 8.9, 8.10, 6.8 | `executor/single.py`, `executor/bundles.py`, `executor/handlers.py`, expiry jobs, `POST /api/actions/{id}/confirm`, `POST /api/bundles/{id}/confirm` | `pytest tests/executor -q`: 8 concurrent confirms for the last spot give exactly one booking; same-user overlap race gives one success; double-confirm replay is safe; bundle order, skip on failed dependency, independent step still runs, `PRICE_CHANGED`, expired action |
+| **P6b** | Payments (Razorpay) | 4.4, 6.8, 8.9, 8.15, 9.5, 10.4, 12 | `payments` and `payment_events` tables (already in the schema), `PaymentProvider` adapter with `RazorpayProvider`, `MockProvider` and a test `FakeProvider`; `payments.begin`, `finalize_paid`, `finalize_unpaid`; verify, webhook, status and cancel endpoints; reconciler in the digest worker; bundle pause and resume; receipt and review emails; production startup check | `pytest tests/payments -q` passes every row of the test table in 8.15, and the P6 executor tests still pass in `mock` mode |
 | **P7** | Tool layer | 8.1, 8.5, 8.6, 8.8, 7.3 | Pydantic schemas, tool registry with role and consent checks, all read, calc and propose tools, calculators (BMR, macros, hydration, `price_diff`, progression) | `pytest tests/tools -q`: **registry scan test** (no tool accepts `user_id` or a recipient, no write tool exists, every tool declares roles), consent gating, allergen fail-closed, calculator unit tests |
 | **P8** | Agent runner and first four agents | 7.1 to 7.8, 8.7, 13.1 | Prompt loader with SHA-256 check and `prompt_versions` rows, runner (tool loop, validation, one retry, budgets, safe fallback), SCHEDULE, MEMBERSHIP, WELLNESS, NUTRITION prompts and post-validators, `FakeLLM`, eval harness | `pytest tests/evals -k "schedule or membership or wellness or nutrition" -q`; safety cases (red flag, crisis, eating disorder, minor, pregnancy, allergy, injection) at **100%** |
 | **P9** | Supervisor | 4.8, 5.3, 7.14 to 7.17, 8.10 to 8.13 | Input guard (works with no LLM), planner (rules, LLM fallback, `validate_plan`), bundle builder with projected state, synthesizer and output guard, LangGraph wiring, `POST /api/agent/chat` with SSE | `pytest tests/evals -k "guard or planner or bundle or flagship" -q`: the **flagship four-intent message from 4.8** yields one bundle card plus one question, steps 2 and 3 become `SKIPPED` when step 1 fails, "book this for another user" and "ignore your rules" are refused |
 | **P10** | Remaining user agents and knowledge base | 7.9 to 7.11, 7.6, 11 | FITNESS, TRAINER_INFO, SUPPORT, COMMS prompts and tools; Chroma ingestion of the starter corpus; retrieval with citations | Eval suites for those agents pass; KB injection pack (instructions hidden in retrieved text) passes |
 | **P11** | Staff copilots | 4.9, 4.10, 4.11, 7.12, 7.13, 6.3, 6.6 | TRAINER_OPS and ADMIN_INSIGHTS, availability and time off, recurring series preview and creation, metric catalog and analytics views (`gympro_analytics`, k-anonymity), daily digest, issue triage endpoints | `pytest tests/evals -k "trainer_ops or admin_insights" -q` plus tests that a trainer never sees health data, an admin never gets per-member data, and ADMIN_INSIGHTS refuses admin-role requests |
-| **P12** | Frontend | 10, 4.7, 4.9, 4.10, 17 | All routes in 10.1, three consoles, onboarding wizard, Coach drawer with confirmation card, bundle card and voice, privacy screen, accessible chat, light and dark themes | `npm run build`, `npm test`, and the demo script in 1.5 completed manually against Mailpit |
+| **P12** | Frontend | 10 (including 10.4), 4.7, 4.9, 4.10, 17 | All routes in 10.1, three consoles, onboarding wizard, Coach drawer with confirmation card, bundle card and voice, privacy screen, accessible chat, light and dark themes | `npm run build`, `npm test`, and the demo script in 1.5 completed manually against Mailpit |
 | **P13** | Hardening and release | 12, 13.2, 14, 16 | Threat-table tests from 12.2, observability (OpenTelemetry, structured logs), red-team pack, runbook stubs, final README | Every check in 13.2 and 16 that applies to a local build passes. Record anything that needs production infrastructure (TLS, real SMTP, payments) in `docs/PROGRESS.md` as a known gap |
+| **P14** | Move to a company PC through GitHub | 15, 6.14, 16 | `.gitignore` and `.gitattributes` audit; pinned `backend/requirements.txt` and committed `package-lock.json`; `backend/db/00_create_databases.sql` (creates `gympro` and `gympro_test`; roles and grants already come from `schema.sql`, section 6.14); `scripts/check_prereqs.ps1`, `scripts/setup_company_pc.ps1`, `scripts/start_all.ps1`, `scripts/reset_dev_db.ps1`; complete `.env.example`; `LLM_PROVIDER=fake` option (scripted FakeLLM, refused in production) because Ollama is not allowed on the company PC; `docs/COMPANY_PC_SETUP.md` (tools, proxy, ports, run order, what not to run, troubleshooting); optional `.github/workflows/ci.yml`; secret scan with no findings | A fresh clone in an empty folder on a clean machine or new Windows profile, using new database names and following only `docs/COMPANY_PC_SETUP.md`, passes `pytest tests/db tests/auth tests/messaging -q` and the 1.5 demo script; `git ls-files` shows no `.env`, keys, `venv`, `node_modules`, vector store or dumps; the secret scan reports nothing; the P0 to P13 gates still pass |
 
 ### 19.2 Required repository files (checklist)
 
@@ -4233,4 +4600,4 @@ Build in this order. Each phase lists what to read, what to deliver and the **ga
 
 ### 19.3 Final acceptance
 
-The project is complete when a fresh clone, following only section 15, reaches a state where: a user registers and verifies by email in Mailpit; completes intake with consent; asks the Coach the flagship message from 4.8 and confirms one bundle card; receives the booking email; and an admin approves a trainer request, all with the safety and security suites green.
+The project is complete when a fresh clone, following only section 15, reaches a state where: a user registers and verifies by email in Mailpit; completes intake with consent; asks the Coach the flagship message from 4.8 and confirms one bundle card; receives the booking email; and an admin approves a trainer request. The flagship upgrade also works through Razorpay test-mode Checkout (`PAYMENTS_MODE=razorpay`), all with the safety and security suites green.

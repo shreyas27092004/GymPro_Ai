@@ -162,9 +162,11 @@ cd backend
 .\venv\Scripts\pytest.exe tests/evals -k "trainer_ops or admin_insights" -q
 ```
 
-Run frontend build & tests:
+Run Phase P12 frontend build & test suite (Gate):
 ```powershell
 cd frontend
 npm run build
 npm test
 ```
+All routes (`/register`, `/verify`, `/login`, `/forgot`, `/reset`, `/onboarding`, `/app`, `/app/membership`, `/app/privacy`, `/trainer`, `/admin`), AI Coach drawer, bundle cards, and role consoles are compiled and tested with 100% pass rate.
+
