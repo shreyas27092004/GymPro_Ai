@@ -69,3 +69,4 @@ mail_outbox/
 *.dump
 *.sql.tar
 *.bak
+*.zip
