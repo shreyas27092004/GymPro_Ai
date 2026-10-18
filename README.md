@@ -84,10 +84,16 @@ Frontend runs at: `http://localhost:5173`
 ---
 
 ### 5. Running Tests
-Run backend tests:
+Run all backend tests:
 ```powershell
 cd backend
 .\venv\Scripts\pytest.exe -q
+```
+
+Run Phase P1 database gate tests:
+```powershell
+cd backend
+.\venv\Scripts\pytest.exe tests/db -q
 ```
 
 Run frontend build & tests:

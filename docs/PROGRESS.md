@@ -3,7 +3,7 @@
 | Phase | Description | Status | Gate Result | Notes / Known Gaps |
 | :--- | :--- | :---: | :---: | :--- |
 | **P0** | Scaffold and environment | Complete | PASSED | `pytest -q` passed (4/4), `uvicorn app.main:app` serves `/health` (HTTP 200), `npm run build` succeeded. Repo layout from 8.2 established, `.env.example`, `scripts/gen_keys.py`, settings, rate limiter, test fixtures, and Vite React TS frontend ready. Database schema & seed data deferred to P1 per spec. |
-| **P1** | Database | Not Started | - | Schema, seed data, RLS, and triggers |
+| **P1** | Database | Complete | PASSED | `pytest tests/db -q` passed (5/5). Applied full schema.sql (Section 6) with RLS policies, trigger-enforced privilege escalation guards, exclusion constraints, and role permissions. Created seed_dev.sql with 3 trainers and 30 classes across 14 days from frozen clock. Implemented parameterized set_rls in db.py. |
 | **P2** | Auth service | Not Started | - | RS256 JWT, refresh tokens, role/status enforcement |
 | **P3** | Messaging | Not Started | - | RabbitMQ topology, outbox relay, workers |
 | **P4** | Role requests | Not Started | - | Trainer requests, admin one-time code, cooling-off |

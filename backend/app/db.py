@@ -25,11 +25,20 @@ AsyncSessionLocal = async_sessionmaker(
 
 
 async def set_rls(session: AsyncSession, user_id: str | None, role: str | None) -> None:
-    """Set transaction-local RLS context."""
-    if user_id:
-        await session.execute(text(f"SET LOCAL app.user_id = '{user_id}'"))
-    if role:
-        await session.execute(text(f"SET LOCAL app.role = '{role}'"))
+    """
+    Set transaction-local RLS context using set_config(..., is_local=true).
+    Equivalent to SET LOCAL app.user_id and SET LOCAL app.role, safe against injection.
+    """
+    uid_str = str(user_id) if user_id else ""
+    role_str = str(role) if role else ""
+    await session.execute(
+        text("SELECT set_config('app.user_id', :uid, true)"),
+        {"uid": uid_str},
+    )
+    await session.execute(
+        text("SELECT set_config('app.role', :role, true)"),
+        {"role": role_str},
+    )
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:

@@ -33,3 +33,9 @@ This document records architectural decisions, resolutions of ambiguities, and i
 - **P0-2 (Key Generation):** `scripts/gen_keys.py` generates 2048-bit RS256 keys, serializes to PEM format, and escapes newlines (`\n`) for single-line .env storage as instructed in Section 15.7.
 - **P0-3 (Health & Readiness):** `GET /health` acts as lightweight liveness probe (`{"status": "ok"}`). `GET /ready` performs readiness checks against database connectivity and configuration integrity.
 - **P0-4 (Frontend Build & Tooling):** Built React 18 + TypeScript scaffolding with Vite, Tailwind CSS v3, React Router v6, TanStack Query v5, Lucide React, and Vitest for testing.
+
+## Phase P1 Decisions
+- **P1-1 (Database Roles & Least Privilege):** Applied section 6.14 DDL creating `gympro_app` (NOSUPERUSER, NOBYPASSRLS), `gympro_seed` (bootstrap/fixtures only), and `gympro_analytics` (views only).
+- **P1-2 (SQL Parameterized RLS Context):** Implemented `set_rls` using `SELECT set_config('app.user_id', :uid, true)` and `SELECT set_config('app.role', :role, true)` to ensure SQL-injection-proof setting of transaction-local RLS variables.
+- **P1-3 (Connection Pooling in Asyncpg Tests):** Used `poolclass=NullPool` for pytest asyncpg test engines to prevent cross-test connection pool leaks across distinct event loops on Windows.
+- **P1-4 (Seed Data):** Populated `seed_dev.sql` with the 3 membership plans, 3 trainers (inserted via `gympro_seed` role to satisfy `guard_role_change`), and 30 classes across the 14 days following the frozen clock (`2026-10-16T18:05:00+05:30`), covering both trial-eligible and contraindicated (knee-unsafe) classes.
