@@ -138,6 +138,12 @@ cd backend
 .\venv\Scripts\pytest.exe tests/tools -q
 ```
 
+Run Phase P8 agent runner & domain evals gate tests:
+```powershell
+cd backend
+.\venv\Scripts\pytest.exe tests/evals -k "schedule or membership or wellness or nutrition" -q
+```
+
 Run frontend build & tests:
 ```powershell
 cd frontend

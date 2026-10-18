@@ -54,7 +54,17 @@ class Envelope(BaseModel):
 class MacroSet(BaseModel):
     protein_g: int
     carbs_g: int
-    fats_g: int
+    fats_g: int | None = None
+    fat_g: int | None = None
+
+    def model_post_init(self, __context: Any) -> None:
+        if self.fats_g is None and self.fat_g is not None:
+            self.fats_g = self.fat_g
+        elif self.fat_g is None and self.fats_g is not None:
+            self.fat_g = self.fats_g
+        if self.fats_g is None:
+            self.fats_g = 0
+            self.fat_g = 0
 
 
 class NutritionData(BaseModel):

@@ -32,15 +32,14 @@ class ProposeRenewalArgs(BaseArgs):
 async def list_plans(args: EmptyArgs, ctx: RunContext) -> dict[str, Any]:
     await set_rls_system(ctx.db)
     res = await ctx.db.execute(
-        text("SELECT code, name, description, price_monthly, price_annual, perks, sort_order FROM membership_plans WHERE is_active = true ORDER BY sort_order ASC")
+        text("SELECT code, display_name AS name, price_monthly, price_annual, perks, sort_order FROM membership_plans WHERE is_active = true ORDER BY sort_order ASC")
     )
     plans = [
         {
             "code": r["code"],
             "name": r["name"],
-            "description": r["description"],
             "price_monthly": float(r["price_monthly"]),
-            "price_annual": float(r["price_annual"]),
+            "price_annual": float(r["price_annual"]) if r["price_annual"] is not None else None,
             "perks": r["perks"],
             "sort_order": r["sort_order"],
         }
@@ -53,7 +52,7 @@ async def list_plans(args: EmptyArgs, ctx: RunContext) -> dict[str, Any]:
 async def get_highest_plan(args: EmptyArgs, ctx: RunContext) -> dict[str, Any]:
     await set_rls_system(ctx.db)
     res = await ctx.db.execute(
-        text("SELECT code, name, price_monthly, price_annual, perks FROM membership_plans WHERE is_active = true ORDER BY sort_order DESC LIMIT 1")
+        text("SELECT code, display_name AS name, price_monthly, price_annual, perks FROM membership_plans WHERE is_active = true ORDER BY sort_order DESC LIMIT 1")
     )
     row = res.mappings().one_or_none()
     if not row:
@@ -64,7 +63,7 @@ async def get_highest_plan(args: EmptyArgs, ctx: RunContext) -> dict[str, Any]:
             "code": row["code"],
             "name": row["name"],
             "price_monthly": float(row["price_monthly"]),
-            "price_annual": float(row["price_annual"]),
+            "price_annual": float(row["price_annual"]) if row["price_annual"] is not None else None,
             "perks": row["perks"],
         },
     }
@@ -76,7 +75,7 @@ async def get_my_membership(args: EmptyArgs, ctx: RunContext) -> dict[str, Any]:
     res = await ctx.db.execute(
         text(
             """
-            SELECT m.id, m.plan_code, m.status, m.billing_cycle, m.start_date, m.end_date, p.name, p.perks
+            SELECT m.id, m.plan_code, m.status, m.billing_cycle, m.start_date, m.end_date, p.display_name AS name, p.perks
             FROM memberships m
             JOIN membership_plans p ON m.plan_code = p.code
             WHERE m.user_id = :uid AND m.status = 'ACTIVE'

@@ -44,6 +44,14 @@ class Settings(BaseSettings):
     razorpay_key_secret: str | None = None       # server only
     razorpay_webhook_secret: str | None = None   # server only
 
+    gym_timezone: str = "Asia/Kolkata"
+    booking_buffer_minutes: int = 15
+    late_cancel_hours: int = 2
+    pending_action_ttl_min: int = 10
+    bundle_max_steps: int = 5
+    trial_classes: int = 3
+    trial_days: int = 14
+
     def model_post_init(self, __context) -> None:
         if self.env == "production" and self.payments_mode == "mock":
             raise RuntimeError("PAYMENTS_MODE=mock is not allowed when ENV=production")

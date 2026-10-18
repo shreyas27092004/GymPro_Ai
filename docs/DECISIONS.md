@@ -101,5 +101,17 @@ This document records architectural decisions, resolutions of ambiguities, and i
 - **P7-6 (Allergen Fail-Closed Filtering):** `find_foods` matches food allergens against the member's recorded profile. If a food item contains any recorded allergy or cannot be verified safe, it is excluded (`fail-closed`).
 - **P7-7 (No Recipient Injection in Comms):** `propose_send_email` rejects any caller-specified email address. The recipient is unconditionally resolved from `ctx.session.email` (or `users.email`), preventing arbitrary outbound mail relay.
 
+## Phase P8 Decisions
+- **P8-1 (Five-Layer Prompt Hierarchy & SHA-256 Versioning):** Prompt composition strictly stacks: (1) Base System Policy, (2) Domain Agent Prompt, (3) Session Context JSON, (4) User Input, and (5) Tool Results wrapped in XML tags. System prompts are versioned by front matter semver (`version: 1.0.0`) and stored in the database `prompt_versions` table with SHA-256 integrity hashes on startup.
+- **P8-2 (Hermetic Agent Runner & Bounded Tool Loop):** The agent runner executes a maximum 5-turn tool loop within a strict wall-clock timeout (`AGENT_TIMEOUT_SECONDS = 15s`) and token budget (`AGENT_MAX_TOTAL_TOKENS = 3500`). Token consumption is tracked across LLM calls; budget exhaustion or timeout triggers immediate deterministic safe fallback.
+- **P8-3 (Single Retry with Error Feedback):** When the model returns invalid JSON or fails Pydantic schema validation, the runner provides exactly one corrective turn (`attempt 2`) feeding the validation error back to the model before falling back to `safe_fallback(agent)`.
+- **P8-4 (Deterministic Multi-Stage Post-Validators):** Before returning an envelope response to the caller, the runner passes the envelope through agent-specific post-validators:
+  - **Word limit:** `user_message` clamped/verified <= 90 words.
+  - **Schedule confirmation:** Ensures proposals link to real classes and do not claim completed booking when status is `NEEDS_CONFIRMATION`.
+  - **Membership downgrade prevention:** Post-validator rejects any attempt to downgrade plan.
+  - **Wellness red flags & crisis escalation:** Immediate elevation to `status = ESCALATE` and safety flags (`RED_FLAG_SYMPTOM`, `CRISIS`) with empty exercise suggestions when acute symptoms (chest pain, shortness of breath, suicidal ideation) are detected.
+  - **Nutrition minor safety & fail-closed allergen audit:** Calorie deficit recommendations for minors (< 18) are blocked; meal plans containing allergens matching the member profile are rejected.
+- **P8-5 (Hermetic Eval Harness & FakeLLM):** All eval cases are specified in YAML under `tests/evals/cases/` and tested against a scriptable `FakeLLM` mock that faithfully adheres to the OpenAI chat completions schema. No network calls or API keys are required for 100% reproducible safety gates.
+
 
 

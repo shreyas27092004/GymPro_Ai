@@ -26,6 +26,7 @@ class SessionContext(BaseModel):
     is_minor: bool = False
     cooling_off_active: bool = False  # new admins
     token_version: int = 0
+    allergies: list[str] = []
 
     def public(self) -> dict[str, Any]:
         """Returns public session data safe to expose to client."""
@@ -46,6 +47,22 @@ class SessionContext(BaseModel):
             "is_minor": self.is_minor,
             "cooling_off_active": self.cooling_off_active,
         }
+
+    def llm_json(self) -> str:
+        import json
+        return json.dumps({
+            "user_id": self.user_id,
+            "role": self.role,
+            "account_status": self.account_status,
+            "plan": self.plan,
+            "locale": self.locale,
+            "timezone": self.timezone,
+            "age_years": self.age_years,
+            "health_consent": self.health_consent,
+            "is_minor": self.is_minor,
+            "cooling_off_active": self.cooling_off_active,
+            "account_email": self.account_email,
+        })
 
 
 async def load_session_context(db: AsyncSession, user_id_str: str) -> SessionContext | None:

@@ -18,3 +18,8 @@ def build_llm():
 
 
 llm = build_llm()
+
+
+def set_llm(client: any) -> None:
+    global llm
+    llm = client

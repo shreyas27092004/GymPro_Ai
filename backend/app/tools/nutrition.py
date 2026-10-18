@@ -12,8 +12,10 @@ from .registry import RunContext, tool
 
 
 class ComputeMacrosArgs(BaseArgs):
-    daily_calories: int = Field(gt=500, le=8000)
-    goal: str = "MAINTENANCE"
+    daily_calories: int | None = Field(default=None, gt=500, le=8000)
+    target_kcal: int | None = Field(default=None, gt=500, le=8000)
+    goal: str | None = "MAINTENANCE"
+    split_name: str | None = None
     weight_kg: float | None = None
 
 
@@ -22,8 +24,9 @@ class SearchNutritionKbArgs(BaseArgs):
 
 
 class FindFoodsArgs(BaseArgs):
-    query: str = Field(min_length=1, max_length=100)
+    query: str | None = None
     category: str | None = None
+    constraints: dict[str, Any] | None = None
 
 
 class ProposeSavePlanArgs(BaseArgs):
@@ -87,9 +90,11 @@ async def get_my_nutrition_inputs(args: EmptyArgs, ctx: RunContext) -> dict[str,
 @tool("compute_macros", ComputeMacrosArgs, roles={"USER"}, kind="calc")
 async def compute_macros(args: ComputeMacrosArgs, ctx: RunContext) -> dict[str, Any]:
     try:
+        kcal = args.daily_calories if args.daily_calories is not None else (args.target_kcal or 2000)
+        goal = args.goal or args.split_name or "MAINTENANCE"
         macros = calc_macros_fn(
-            daily_calories=args.daily_calories,
-            goal=args.goal,
+            daily_calories=kcal,
+            goal=goal,
             weight_kg=args.weight_kg,
         )
         return {"ok": True, **macros}
@@ -119,6 +124,9 @@ async def find_foods(args: FindFoodsArgs, ctx: RunContext) -> dict[str, Any]:
     any item matching user allergies.
     """
     user_allergies = set()
+    if hasattr(ctx.session, "allergies") and ctx.session.allergies:
+        user_allergies.update(a.upper() for a in ctx.session.allergies)
+
     if ctx.session.health_consent:
         await set_rls_system(ctx.db)
         res = await ctx.db.execute(
@@ -127,9 +135,9 @@ async def find_foods(args: FindFoodsArgs, ctx: RunContext) -> dict[str, Any]:
         )
         row = res.mappings().one_or_none()
         if row and row["allergies"]:
-            user_allergies = {a.upper() for a in row["allergies"]}
+            user_allergies.update(a.upper() for a in row["allergies"])
 
-    q = args.query.lower()
+    q = (args.query or "").lower()
     results = []
     for food in FOOD_CATALOG:
         food_allergens = {a.upper() for a in food["allergens"]}
@@ -137,7 +145,7 @@ async def find_foods(args: FindFoodsArgs, ctx: RunContext) -> dict[str, Any]:
         if user_allergies.intersection(food_allergens):
             continue
 
-        if q in food["name"].lower() or q in food["category"].lower():
+        if not q or q in food["name"].lower() or q in food["category"].lower():
             if not args.category or args.category.upper() == food["category"]:
                 results.append(food)
 
