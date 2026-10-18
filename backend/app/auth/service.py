@@ -195,16 +195,8 @@ async def verify_email(db: AsyncSession, raw_token: str, ip: str = "127.0.0.1") 
             text("UPDATE users SET account_status = 'ACTIVE' WHERE id = :uid"),
             {"uid": row["user_id"]},
         )
-        await db.execute(
-            text(
-                """
-                INSERT INTO trial_grants (user_id, phone_hash, classes_total, classes_used, starts_at, expires_at)
-                VALUES (:uid, :phash, 3, 0, NOW(), NOW() + INTERVAL '14 days')
-                ON CONFLICT DO NOTHING
-                """
-            ),
-            {"uid": row["user_id"], "phash": row["phone_hash"]},
-        )
+        from ..entitlements.trial import start_trial
+        await start_trial(db, row["user_id"], row["phone_hash"])
     elif req_role == "TRAINER":
         next_status = "PENDING_APPROVAL"
         await db.execute(

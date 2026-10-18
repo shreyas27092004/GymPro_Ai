@@ -3,6 +3,7 @@ from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 from .auth.admin_router import admin_router
 from .auth.router import router as auth_router
+from .entitlements.router import router as entitlements_router
 from .settings import settings
 
 app = FastAPI(
@@ -28,6 +29,9 @@ app.include_router(auth_router, prefix="/api")
 # Mount admin routers under /api/admin and /admin
 app.include_router(admin_router, prefix="/api/admin")
 app.include_router(admin_router, prefix="/admin")
+
+# Mount entitlements & member profile router under /api
+app.include_router(entitlements_router, prefix="/api")
 
 
 @app.get("/health", status_code=status.HTTP_200_OK, tags=["System"])

@@ -1,2 +1,4 @@
 # app/tools/schedule.py
-# Implemented in Phase P7: schedule tools
+from app.entitlements.resolver import Entitlement, entitlements
+
+__all__ = ["Entitlement", "entitlements"]

@@ -667,6 +667,7 @@ CREATE POLICY system_all ON action_bundles   USING (current_setting('app.role', 
 CREATE POLICY system_all ON nutrition_plans  USING (current_setting('app.role', true) = 'SYSTEM');
 CREATE POLICY system_all ON daily_health_logs USING (current_setting('app.role', true) = 'SYSTEM');
 CREATE POLICY system_all ON trial_grants     USING (current_setting('app.role', true) = 'SYSTEM');
+CREATE POLICY system_all ON member_intake_versions USING (current_setting('app.role', true) = 'SYSTEM');
 CREATE POLICY system_all ON issue_reports    USING (current_setting('app.role', true) = 'SYSTEM');
 
 ALTER TABLE class_bookings         FORCE ROW LEVEL SECURITY;

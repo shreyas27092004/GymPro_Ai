@@ -1,2 +1,4 @@
 # app/tools/calculators.py
-# Implemented in Phase P7: BMR, macros, hydration, price_diff
+from app.entitlements.membership import price_diff, PriceDiffQuote
+
+__all__ = ["price_diff", "PriceDiffQuote"]

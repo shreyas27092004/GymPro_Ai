@@ -114,6 +114,12 @@ cd backend
 .\venv\Scripts\pytest.exe tests/roles -q
 ```
 
+Run Phase P5 trial & entitlements gate tests:
+```powershell
+cd backend
+.\venv\Scripts\pytest.exe tests/entitlements -q
+```
+
 Run frontend build & tests:
 ```powershell
 cd frontend
