@@ -47,15 +47,20 @@ export const LoginPage: React.FC = () => {
       }
     },
     onSuccess: async (data) => {
-      const token = data.access_token;
-      const session = data.session as UserSession;
-      await login(token, session);
+      try {
+        const token = data.access_token;
+        const user = await login(token, data?.session);
 
-      // If user is new and hasn't given/declined consent, route to onboarding
-      if (session.role === 'USER' && !session.health_consent) {
-        navigate('/onboarding');
-      } else {
-        navigate(homeFor(session.role));
+        if (user?.role === 'USER' && !user.health_consent) {
+          navigate('/onboarding');
+        } else if (user?.role) {
+          navigate(homeFor(user.role));
+        } else {
+          navigate('/app');
+        }
+      } catch (err) {
+        console.error('Error during post-login navigation:', err);
+        navigate('/app');
       }
     },
     onError: (e: any) => {

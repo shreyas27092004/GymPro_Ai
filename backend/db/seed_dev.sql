@@ -18,10 +18,10 @@ SET ROLE gympro_seed;
 
 INSERT INTO users (id, email, password_hash, full_name, role, account_status, email_verified_at)
 VALUES
-  ('11111111-1111-1111-1111-111111111111', 'trainer.arjun@gympro.local', '$2b$12$K1r6fUfq4v1tKekP1VvO9uY2L8b3Nf8KjV3aQ0kYdKqU4R0H7zZfa', 'Arjun Kumar', 'TRAINER', 'ACTIVE', '2026-10-01 10:00:00+05:30'),
-  ('22222222-2222-2222-2222-222222222222', 'trainer.priya@gympro.local', '$2b$12$K1r6fUfq4v1tKekP1VvO9uY2L8b3Nf8KjV3aQ0kYdKqU4R0H7zZfa', 'Priya Sharma', 'TRAINER', 'ACTIVE', '2026-10-01 10:00:00+05:30'),
-  ('33333333-3333-3333-3333-333333333333', 'trainer.marcus@gympro.local', '$2b$12$K1r6fUfq4v1tKekP1VvO9uY2L8b3Nf8KjV3aQ0kYdKqU4R0H7zZfa', 'Marcus Vance', 'TRAINER', 'ACTIVE', '2026-10-01 10:00:00+05:30')
-ON CONFLICT (email) DO NOTHING;
+  ('11111111-1111-1111-1111-111111111111', 'trainer.arjun@gympro.local', '$2b$12$lTtMwV0r4tGDHhEH9pWLHO1n5P7SVR5gdDdvNbIIr2un4SCjIytYy', 'Arjun Kumar', 'TRAINER', 'ACTIVE', '2026-10-01 10:00:00+05:30'),
+  ('22222222-2222-2222-2222-222222222222', 'trainer.priya@gympro.local', '$2b$12$lTtMwV0r4tGDHhEH9pWLHO1n5P7SVR5gdDdvNbIIr2un4SCjIytYy', 'Priya Sharma', 'TRAINER', 'ACTIVE', '2026-10-01 10:00:00+05:30'),
+  ('33333333-3333-3333-3333-333333333333', 'trainer.marcus@gympro.local', '$2b$12$lTtMwV0r4tGDHhEH9pWLHO1n5P7SVR5gdDdvNbIIr2un4SCjIytYy', 'Marcus Vance', 'TRAINER', 'ACTIVE', '2026-10-01 10:00:00+05:30')
+ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash;
 
 RESET ROLE;
 

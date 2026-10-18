@@ -7,7 +7,7 @@ interface AuthContextType {
   me: UserSession | null;
   isLoading: boolean;
   token: string | null;
-  login: (token: string, session?: UserSession) => Promise<void>;
+  login: (token: string, session?: UserSession) => Promise<UserSession | null>;
   logout: () => Promise<void>;
   refreshMe: () => Promise<UserSession | null>;
   theme: 'light' | 'dark';
@@ -70,15 +70,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [token]);
 
-  const login = async (newToken: string, session?: UserSession) => {
+  const login = async (newToken: string, session?: UserSession): Promise<UserSession | null> => {
     setAccessToken(newToken);
     setTokenState(newToken);
     if (session) {
       setMe(session);
       setIsLoading(false);
+      return session;
     } else {
       setIsLoading(true);
-      await refreshMe();
+      const user = await refreshMe();
+      return user;
     }
   };
 
