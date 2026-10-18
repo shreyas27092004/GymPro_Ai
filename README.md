@@ -96,6 +96,12 @@ cd backend
 .\venv\Scripts\pytest.exe tests/db -q
 ```
 
+Run Phase P2 auth gate tests:
+```powershell
+cd backend
+.\venv\Scripts\pytest.exe tests/auth -q
+```
+
 Run frontend build & tests:
 ```powershell
 cd frontend

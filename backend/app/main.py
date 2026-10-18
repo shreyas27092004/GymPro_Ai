@@ -1,6 +1,7 @@
 # app/main.py
 from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
+from .auth.router import router as auth_router
 from .settings import settings
 
 app = FastAPI(
@@ -17,6 +18,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mount authentication routers under /api/auth, /auth, /api, and /
+app.include_router(auth_router, prefix="/api/auth")
+app.include_router(auth_router, prefix="/auth")
+app.include_router(auth_router, prefix="/api")
 
 
 @app.get("/health", status_code=status.HTTP_200_OK, tags=["System"])

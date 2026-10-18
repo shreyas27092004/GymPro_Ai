@@ -4,7 +4,7 @@
 | :--- | :--- | :---: | :---: | :--- |
 | **P0** | Scaffold and environment | Complete | PASSED | `pytest -q` passed (4/4), `uvicorn app.main:app` serves `/health` (HTTP 200), `npm run build` succeeded. Repo layout from 8.2 established, `.env.example`, `scripts/gen_keys.py`, settings, rate limiter, test fixtures, and Vite React TS frontend ready. Database schema & seed data deferred to P1 per spec. |
 | **P1** | Database | Complete | PASSED | `pytest tests/db -q` passed (5/5). Applied full schema.sql (Section 6) with RLS policies, trigger-enforced privilege escalation guards, exclusion constraints, and role permissions. Created seed_dev.sql with 3 trainers and 30 classes across 14 days from frozen clock. Implemented parameterized set_rls in db.py. |
-| **P2** | Auth service | Not Started | - | RS256 JWT, refresh tokens, role/status enforcement |
+| **P2** | Auth service | Complete | PASSED | `pytest tests/auth -q` passed (6/6). RS256 JWT validation, refresh token rotation with theft reuse detection, equal-time login password verification, 5-attempt account lockout with exponential backoff, no account enumeration on register/forgot, role injection protection, transactional notification outbox enqueueing, and `GET /api/me`. |
 | **P3** | Messaging | Not Started | - | RabbitMQ topology, outbox relay, workers |
 | **P4** | Role requests | Not Started | - | Trainer requests, admin one-time code, cooling-off |
 | **P5** | Trial & entitlements | Not Started | - | Entitlement resolver, trial rules, intake versions |

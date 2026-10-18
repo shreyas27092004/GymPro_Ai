@@ -39,3 +39,13 @@ This document records architectural decisions, resolutions of ambiguities, and i
 - **P1-2 (SQL Parameterized RLS Context):** Implemented `set_rls` using `SELECT set_config('app.user_id', :uid, true)` and `SELECT set_config('app.role', :role, true)` to ensure SQL-injection-proof setting of transaction-local RLS variables.
 - **P1-3 (Connection Pooling in Asyncpg Tests):** Used `poolclass=NullPool` for pytest asyncpg test engines to prevent cross-test connection pool leaks across distinct event loops on Windows.
 - **P1-4 (Seed Data):** Populated `seed_dev.sql` with the 3 membership plans, 3 trainers (inserted via `gympro_seed` role to satisfy `guard_role_change`), and 30 classes across the 14 days following the frozen clock (`2026-10-16T18:05:00+05:30`), covering both trial-eligible and contraindicated (knee-unsafe) classes.
+
+## Phase P2 Decisions
+- **P2-1 (RS256 JWT & Token Verification):** `create_access_token` and `decode_access_token` use RS256 with explicit audience `aud="gympro"` and subject claims. Access tokens verify that `ver` matches `users.token_version`. Algorithm `none` and symmetric forged signatures are strictly rejected.
+- **P2-2 (Dynamic Database Role & Status):** User role and account status are always re-read from the database upon every request in `get_session`, ensuring immediate revocation and role propagation without trusting JWT claims.
+- **P2-3 (Refresh Token Family Rotation & Reuse Detection):** Refresh tokens are grouped into families (`family_id`). Using an already-rotated refresh token triggers immediate theft detection: all tokens in the entire family are revoked, an audit log entry (`REFRESH_REUSE_DETECTED`) is written, and HTTP 401 is returned.
+- **P2-4 (Equal-Time Password Check):** `verify_password` checks candidate passwords against a static `DUMMY_HASH` if the user is missing from the database, preventing username enumeration through timing attacks.
+- **P2-5 (Account Lockout & Exponential Backoff):** 5 consecutive failed login attempts lock the user account for 15 minutes, with exponential doubling for subsequent failures.
+- **P2-6 (No Account Enumeration):** Registration and forgot-password endpoints return identical HTTP 200 responses regardless of whether the email already exists in the system.
+- **P2-7 (Transactional Notification Outbox):** All transactional emails (email verification, password reset, and registration collisions) are enqueued directly into `notification_outbox` within the database transaction.
+

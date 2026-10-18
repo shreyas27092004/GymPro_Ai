@@ -78,9 +78,23 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
         yield ac
 
 
+from app.db import get_db
+from app.ratelimit import limiter
+
+async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
+    async with TestAppSession() as session:
+        try:
+            yield session
+        finally:
+            await session.close()
+
+app.dependency_overrides[get_db] = override_get_db
+
+
 @pytest_asyncio.fixture(autouse=True)
 async def clean_database():
-    """Truncates dynamic tables in gympro_test before each test using superuser connection."""
+    """Truncates dynamic tables in gympro_test and resets rate limiter before each test."""
+    limiter.reset()
     tables = [
         "payments", "payment_events", "class_bookings", "pending_actions", "action_bundles",
         "fitness_classes", "class_series", "trainer_availability", "trainer_time_off", "trainer_reviews",
