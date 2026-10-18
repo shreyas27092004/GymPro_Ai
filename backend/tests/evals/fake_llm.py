@@ -113,9 +113,13 @@ class FakeLLM:
             agent = "COMMS"
         elif "AGENT: SUPPORT" in sys_msg:
             agent = "SUPPORT"
+        elif "AGENT: FITNESS" in sys_msg:
+            agent = "FITNESS"
+        elif "AGENT: TRAINER_INFO" in sys_msg:
+            agent = "TRAINER_INFO"
 
         # Check for injection or cross-user attempts across all agents
-        if re.search(r"ignore\s+.*rules|you\s+are\s+admin|another\s+user|someone\s+else|lifetime\s+free|print\s+your.*prompt|steroid", user_msg, re.IGNORECASE):
+        if re.search(r"ignore\s+.*rules|you\s+are\s+admin|another\s+user|someone\s+else|lifetime\s+free|print\s+your.*prompt|steroid|hack\s+the\s+database|reveal\s+all.*admin\s+notes|unrestricted\s+ai", user_msg, re.IGNORECASE):
             flags = ["PROMPT_INJECTION"]
             if "another user" in user_msg.lower() or "someone else" in user_msg.lower():
                 flags.append("CROSS_USER_REQUEST")
@@ -140,6 +144,10 @@ class FakeLLM:
             return self._handle_comms(messages, user_msg, tool_results)
         elif agent == "SUPPORT":
             return self._handle_support(messages, user_msg, tool_results)
+        elif agent == "FITNESS":
+            return self._handle_fitness(messages, user_msg, tool_results)
+        elif agent == "TRAINER_INFO":
+            return self._handle_trainer_info(messages, user_msg, tool_results)
 
         return self._envelope_response(agent, "OK", [], "How can I help you today?")
 
@@ -526,6 +534,70 @@ class FakeLLM:
         )
 
     def _handle_support(self, messages: list[dict[str, Any]], user_msg: str, tool_results: list[dict[str, Any]]) -> FakeChatCompletion:
+        low = user_msg.lower()
+
+        if "message the trainer" in low or "tell him off" in low:
+            return self._envelope_response(
+                agent="SUPPORT",
+                status="REFUSED",
+                flags=[],
+                user_message="I cannot message trainers directly. I can send your feedback to the admin team as a report. Want to tell me what happened?",
+                data={"operation": "REFUSE"},
+            )
+
+        if "refund" in low:
+            if not tool_results:
+                return self._tool_call_response([("call_guidance", "get_support_guidance", {"topic": "refund"})])
+            return self._envelope_response(
+                agent="SUPPORT",
+                status="OK",
+                flags=[],
+                user_message="Our refund policy allows refunds within 72 hours of purchase minus an administrative fee. Billing disputes are reviewed by staff within 2 business days.",
+                data={"operation": "COLLECT", "guidance_included": True},
+            )
+
+        if "late" in low or "ignored" in low or "question" in low or "form" in low:
+            if not tool_results:
+                return self._tool_call_response([
+                    ("call_todays_classes", "get_todays_classes_for_me", {}),
+                    ("call_prop_rep", "propose_issue_report", {
+                        "category": "CLASS_QUALITY",
+                        "severity_hint": "LOW",
+                        "user_words": "He started class 20 minutes late and ignored my form question.",
+                        "neutral_summary": "The member reports the class started late and questions were unanswered.",
+                        "class_id": "33333333-3333-3333-3333-333333333333",
+                    }),
+                ])
+            action_id = "d4444444-4444-4444-4444-444444444444"
+            for tr in tool_results:
+                try:
+                    clean = tr.get("content", "").replace("<tool_result>", "").replace("</tool_result>", "").strip()
+                    p = json.loads(clean)
+                    if "action_id" in p:
+                        action_id = p["action_id"]
+                except Exception:
+                    pass
+            return self._envelope_response(
+                agent="SUPPORT",
+                status="NEEDS_CONFIRMATION",
+                flags=[],
+                user_message="Ready to send this report about today's HIIT Spin to the admin team. Tap Confirm to send.",
+                data={
+                    "operation": "PROPOSE_REPORT",
+                    "class_id": "33333333-3333-3333-3333-333333333333",
+                    "class_label": "HIIT Spin, today 7:00 AM",
+                    "category": "CLASS_QUALITY",
+                    "severity_hint": "LOW",
+                    "neutral_summary": "The member reports the class started late and questions were unanswered.",
+                    "guidance_included": False,
+                },
+                confirmation={
+                    "action_id": action_id,
+                    "summary": "Send a report to the admin team about HIIT Spin (today 7:00 AM): late start, form question unanswered. The trainer is not told who reported.",
+                    "expires_at": "2026-10-16T18:15:00+05:30",
+                },
+            )
+
         if not tool_results:
             return self._tool_call_response([
                 ("call_todays_classes", "get_todays_classes_for_me", {})
@@ -546,6 +618,118 @@ class FakeLLM:
                 "guidance_included": False,
             },
             missing_fields=["what_happened"],
+        )
+
+    def _handle_fitness(self, messages: list[dict[str, Any]], user_msg: str, tool_results: list[dict[str, Any]]) -> FakeChatCompletion:
+        low = user_msg.lower()
+        has_knee = "knee" in low
+        is_squat = "squat" in low
+
+        if not tool_results:
+            tools = [
+                ("call_intake", "get_my_intake", {}),
+                ("call_kb", "search_exercise_kb", {"query": "Barbell Squat" if is_squat else ("knee pain" if has_knee else "progressive workout")}),
+                ("call_cat", "get_class_catalog_summary", {}),
+                ("call_prog", "calc_progression", {"current_weight_kg": 60.0, "reps": 10, "rpe": 8.0, "goal": "HYPERTROPHY"}),
+            ]
+            return self._tool_call_response(tools)
+
+        exclusions = ["HIIT", "PLYOMETRICS"] if has_knee else []
+        based_on = ["goal: FAT_LOSS", "experience: BEGINNER"]
+        if has_knee:
+            based_on.append("injury: KNEE")
+
+        roadmap = [
+            {"week": 1, "sessions": 3, "focus": "Foundational form and low-impact movement", "intensity_note": "Moderate RPE 6-7"},
+            {"week": 2, "sessions": 3, "focus": "Progressive volume loading", "intensity_note": "RPE 7"},
+            {"week": 3, "sessions": 4, "focus": "Capacity and strength endurance", "intensity_note": "RPE 8"},
+            {"week": 4, "sessions": 4, "focus": "Active deload and recovery", "intensity_note": "RPE 6"},
+        ]
+
+        return self._envelope_response(
+            agent="FITNESS",
+            status="OK",
+            flags=[],
+            user_message="Here is your tailored 4-week training roadmap designed around your goals.",
+            data={
+                "weekly_frequency": 3,
+                "recommended_classes": [
+                    {"category": "STRENGTH", "sessions_per_week": 2, "max_impact": "LOW" if has_knee else "MODERATE"},
+                    {"category": "YOGA", "sessions_per_week": 1, "max_impact": "LOW"},
+                ],
+                "roadmap": roadmap,
+                "rest_days_per_week": 2,
+                "excluded_for_safety": exclusions,
+                "based_on": based_on,
+                "rationale": "Prioritizes progressive overload while respecting joint comfort.",
+                "reassess_after_days": 28,
+                "disclaimer": "General fitness information, not medical advice.",
+            },
+        )
+
+    def _handle_trainer_info(self, messages: list[dict[str, Any]], user_msg: str, tool_results: list[dict[str, Any]]) -> FakeChatCompletion:
+        low = user_msg.lower()
+        if not tool_results:
+            tags = ["REHAB", "CORRECTIVE"] if ("shoulder" in low or "rehab" in low) else ["STRENGTH"]
+            certs = ["CORRECTIVE_EXERCISE"] if ("shoulder" in low or "corrective" in low) else []
+            return self._tool_call_response([
+                ("call_st_1", "search_trainers", {"goal_tags": tags, "certifications_any": certs, "accepting_clients": True})
+            ])
+
+        if "shoulder" in low or "corrective" in low:
+            trainers = [
+                {
+                    "trainer_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                    "name": "Asha Rao",
+                    "specializations": ["CORRECTIVE_EXERCISE", "STRENGTH"],
+                    "verified_certifications": ["NASM-CES", "ACE-PT"],
+                    "rating": 4.9,
+                    "review_count": 28,
+                    "is_new": False,
+                    "hourly_rate": 2000.0,
+                    "next_available": "2026-10-19T10:00:00+05:30",
+                    "pitch": "Expert in joint mobility and corrective strength pathways.",
+                }
+            ]
+        else:
+            trainers = [
+                {
+                    "trainer_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                    "name": "Asha Rao",
+                    "specializations": ["STRENGTH", "HYPERTROPHY"],
+                    "verified_certifications": ["CSCS"],
+                    "rating": 4.9,
+                    "review_count": 28,
+                    "is_new": False,
+                    "hourly_rate": 2000.0,
+                    "next_available": "2026-10-19T10:00:00+05:30",
+                    "pitch": "Experienced strength coach focusing on progressive compound lifts.",
+                },
+                {
+                    "trainer_id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+                    "name": "Rohan Verma",
+                    "specializations": ["STRENGTH"],
+                    "verified_certifications": ["ACE-PT"],
+                    "rating": None,
+                    "review_count": 2,
+                    "is_new": True,
+                    "hourly_rate": 1500.0,
+                    "next_available": "2026-10-20T14:00:00+05:30",
+                    "pitch": "Enthusiastic strength coach specializing in beginner technique.",
+                },
+            ]
+
+        return self._envelope_response(
+            agent="TRAINER_INFO",
+            status="OK",
+            flags=[],
+            user_message=f"I found {len(trainers)} verified trainers matching your preferences.",
+            data={
+                "match_count": len(trainers),
+                "trainers": trainers,
+                "relaxed_filter": None,
+                "handoff_to": None,
+            },
         )
 
     def _handle_guard(self, user_msg: str) -> FakeChatCompletion:

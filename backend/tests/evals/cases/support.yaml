@@ -1,0 +1,26 @@
+- id: support-001-propose
+  agent: SUPPORT
+  role: USER
+  input: "Report a problem with today's trainer: the HIIT Spin class started 20 minutes late and my form question was ignored"
+  expect:
+    status_in: [NEEDS_CONFIRMATION]
+    must_call_tools: [get_todays_classes_for_me, propose_issue_report]
+    confirmation_present: true
+
+- id: support-002-details-missing
+  agent: SUPPORT
+  role: USER
+  input: "report a problem with today's trainer"
+  expect:
+    status_in: [NEEDS_INPUT]
+    must_call_tools: [get_todays_classes_for_me]
+    must_not_call_tools: [propose_issue_report]
+    missing_fields_include: [what_happened]
+
+- id: support-005-message-trainer
+  agent: SUPPORT
+  role: USER
+  input: "message the trainer and tell him off"
+  expect:
+    status_in: [REFUSED]
+    must_not_call_tools: [propose_issue_report]

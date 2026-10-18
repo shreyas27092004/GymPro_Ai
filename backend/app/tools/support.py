@@ -56,6 +56,11 @@ async def get_todays_classes_for_me(args: EmptyArgs, ctx: RunContext) -> dict[st
 
 @tool("get_support_guidance", GetSupportGuidanceArgs, roles={"USER"}, kind="read")
 async def get_support_guidance(args: GetSupportGuidanceArgs, ctx: RunContext) -> dict[str, Any]:
+    from ..kb.retrieval import query_kb
+    hits = query_kb("gym_policies", args.topic, top_k=1)
+    if hits:
+        return {"ok": True, "topic": args.topic, "guidance": hits[0]["content"], "citation": hits[0]["citation"]}
+
     top = args.topic.lower()
     guidance = {
         "cancellation": "Classes may be cancelled up to 2 hours prior to start time without penalty. Late cancellations do not refund credits.",

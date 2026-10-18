@@ -61,19 +61,12 @@ async def get_my_intake(args: EmptyArgs, ctx: RunContext) -> dict[str, Any]:
 
 @tool("search_exercise_kb", SearchExerciseKbArgs, roles={"USER"}, kind="read")
 async def search_exercise_kb(args: SearchExerciseKbArgs, ctx: RunContext) -> dict[str, Any]:
-    # Standard static knowledge base entries for exercises (untrusted text data)
-    kb_entries = [
-        {"title": "Barbell Squat", "category": "STRENGTH", "content": "Primary compound movement for quads and glutes. Keep torso upright and descend until hip crease is below knee."},
-        {"title": "Deadlift", "category": "STRENGTH", "content": "Hinge movement targeting posterior chain and erectors. Maintain neutral spine and brace core."},
-        {"title": "Bench Press", "category": "STRENGTH", "content": "Upper body push targeting pectorals and triceps. Retract scapulae and control bar to sternum."},
-        {"title": "Knee-Safe Squat Alternative", "category": "RECOVERY", "content": "Box squats or Romanian deadlifts reduce knee shear while maintaining quad and hamstring engagement."},
-        {"title": "HIIT Protocol", "category": "HIIT", "content": "30 seconds sprint / 30 seconds active recovery for 15-20 minutes."},
-    ]
-    matches = [
-        e for e in kb_entries
-        if args.query.lower() in e["title"].lower() or args.query.lower() in e["content"].lower()
-    ]
-    return {"ok": True, "results": matches[:5]}
+    from ..kb.retrieval import query_kb
+    filters = {"category": args.category} if args.category else None
+    results = query_kb("exercises", args.query, filters=filters, top_k=5)
+    if not results:
+        results = query_kb("injury_protocols", args.query, top_k=5)
+    return {"ok": True, "results": results}
 
 
 @tool("get_class_catalog_summary", EmptyArgs, roles={"USER"}, kind="read")

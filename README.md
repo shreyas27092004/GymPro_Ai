@@ -150,6 +150,12 @@ cd backend
 .\venv\Scripts\pytest.exe tests/evals -k "guard or planner or bundle or flagship" -q
 ```
 
+Run Phase P10 remaining user agents & knowledge base gate tests:
+```powershell
+cd backend
+.\venv\Scripts\pytest.exe tests/evals -k "fitness or trainer_info or support or comms or kb_injection" -q
+```
+
 Run frontend build & tests:
 ```powershell
 cd frontend

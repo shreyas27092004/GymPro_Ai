@@ -86,6 +86,10 @@ def validate_envelope(agent: str, env: Envelope, ctx: Any) -> None:
         _validate_comms(env, ctx)
     elif agent_upper == "SUPPORT":
         _validate_support(env, ctx)
+    elif agent_upper == "FITNESS":
+        _validate_fitness(env, ctx)
+    elif agent_upper == "TRAINER_INFO":
+        _validate_trainer_info(env, ctx)
 
 
 def _validate_schedule(env: Envelope, ctx: Any) -> None:
@@ -226,10 +230,67 @@ def _validate_comms(env: Envelope, ctx: Any) -> None:
         if not to_masked.lower().endswith(f"@{expected_domain}"):
             raise ValueError(f"COMMS: recipient must be the account email, got {to_masked}")
 
+    # No health/injury in email subject or body preview
+    title = (data.get("title") or "").lower()
+    preview = (data.get("body_preview") or "").lower()
+    for kw in ("injury", "knee", "back", "weight", "pregnant", "cardiac", "chest pain"):
+        if kw in title or kw in preview:
+            raise ValueError(f"COMMS: subject/preview must not contain personal health details ('{kw}')")
+
+    # BOOKING_DETAILS requires attach_calendar = True
+    if data.get("template_id") == "BOOKING_DETAILS" and not data.get("attach_calendar"):
+        raise ValueError("COMMS: BOOKING_DETAILS template requires attach_calendar=True")
+
 
 def _validate_support(env: Envelope, ctx: Any) -> None:
     data = env.data if isinstance(env.data, dict) else env.data.model_dump() if hasattr(env.data, "model_dump") else {}
     summary = data.get("neutral_summary")
-    if summary and BLAME_WORDS.search(summary):
-        raise ValueError("SUPPORT: summary must be neutral, contains blame words")
+    if summary:
+        if len(summary.split()) > 40:
+            raise ValueError(f"SUPPORT: neutral_summary ({len(summary.split())} words) exceeds 40-word limit")
+        if BLAME_WORDS.search(summary):
+            raise ValueError("SUPPORT: summary must be neutral, contains blame words")
+
+
+def _validate_fitness(env: Envelope, ctx: Any) -> None:
+    data = env.data if isinstance(env.data, dict) else env.data.model_dump() if hasattr(env.data, "model_dump") else {}
+    if env.status == "OK":
+        rec_classes = data.get("recommended_classes") or []
+
+        # Check against handoff safety constraints if present
+        handoff = getattr(ctx, "handoff", {}) or {}
+        if isinstance(handoff, dict):
+            safety_constraints = handoff.get("safety_constraints") or {}
+            handoff_avoid = set(c.upper() for c in (safety_constraints.get("avoid_categories") or []))
+            max_impact = safety_constraints.get("max_impact")
+            for rc in rec_classes:
+                cat = rc.get("category", "").upper()
+                if cat in handoff_avoid:
+                    raise ValueError(f"FITNESS: class category '{cat}' violates avoid_categories safety constraint")
+                if max_impact == "LOW" and rc.get("max_impact", "").upper() in ("MODERATE", "HIGH"):
+                    raise ValueError(f"FITNESS: class '{cat}' exceeds max_impact 'LOW'")
+
+        # Based_on check
+        if rec_classes and not data.get("based_on"):
+            raise ValueError("FITNESS: based_on must be populated with inputs used for planning")
+
+
+def _validate_trainer_info(env: Envelope, ctx: Any) -> None:
+    data = env.data if isinstance(env.data, dict) else env.data.model_dump() if hasattr(env.data, "model_dump") else {}
+    trainers = data.get("trainers") or []
+    if len(trainers) > 3:
+        raise ValueError(f"TRAINER_INFO: returned {len(trainers)} trainers; maximum 3 allowed")
+
+    for t in trainers:
+        review_count = t.get("review_count", 0)
+        if review_count < 5:
+            if not t.get("is_new"):
+                raise ValueError("TRAINER_INFO: trainers with < 5 reviews must be labeled 'is_new: true'")
+            if t.get("rating") is not None:
+                raise ValueError("TRAINER_INFO: trainers with < 5 reviews must NOT show a star rating")
+
+    # Outcome promises check in user_message
+    lower_msg = env.user_message.lower()
+    if any(k in lower_msg for k in ("will lose", "guaranteed", "promise you", "lose 10 kg")):
+        raise ValueError("TRAINER_INFO: user_message must not promise health or physical outcomes")
 

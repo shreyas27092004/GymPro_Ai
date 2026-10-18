@@ -89,8 +89,29 @@ class SupportData(BaseModel):
     neutral_summary: str | None = Field(default=None, max_length=300)
 
 
+class FitnessData(BaseModel):
+    weekly_frequency: int | None = None
+    recommended_classes: list[dict[str, Any]] = []
+    roadmap: list[dict[str, Any]] = []
+    rest_days_per_week: int | None = None
+    excluded_for_safety: list[str] = []
+    based_on: list[str] = []
+    rationale: str | None = None
+    reassess_after_days: int | None = None
+    disclaimer: str | None = None
+
+
+class TrainerInfoData(BaseModel):
+    match_count: int = 0
+    trainers: list[dict[str, Any]] = []
+    relaxed_filter: str | None = None
+    handoff_to: Literal["SCHEDULE", "MEMBERSHIP"] | None = None
+
+
 DATA_MODELS = {
     "NUTRITION": NutritionData,
     "COMMS": CommsData,
     "SUPPORT": SupportData,
+    "FITNESS": FitnessData,
+    "TRAINER_INFO": TrainerInfoData,
 }
