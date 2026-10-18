@@ -41,6 +41,11 @@ async def set_rls(session: AsyncSession, user_id: str | None, role: str | None) 
     )
 
 
+async def set_rls_system(session: AsyncSession) -> None:
+    """Set transaction-local RLS role to SYSTEM for background workers and schedulers."""
+    await set_rls(session, None, "SYSTEM")
+
+
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """Dependency that yields an async database session."""
     async with AsyncSessionLocal() as session:

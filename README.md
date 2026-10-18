@@ -102,6 +102,12 @@ cd backend
 .\venv\Scripts\pytest.exe tests/auth -q
 ```
 
+Run Phase P3 messaging gate tests:
+```powershell
+cd backend
+.\venv\Scripts\pytest.exe tests/messaging -q
+```
+
 Run frontend build & tests:
 ```powershell
 cd frontend

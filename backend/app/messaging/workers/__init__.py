@@ -1,1 +1,1 @@
-"""Workers package."""
+# app/messaging/workers/__init__.py

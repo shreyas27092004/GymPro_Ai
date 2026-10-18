@@ -49,3 +49,14 @@ This document records architectural decisions, resolutions of ambiguities, and i
 - **P2-6 (No Account Enumeration):** Registration and forgot-password endpoints return identical HTTP 200 responses regardless of whether the email already exists in the system.
 - **P2-7 (Transactional Notification Outbox):** All transactional emails (email verification, password reset, and registration collisions) are enqueued directly into `notification_outbox` within the database transaction.
 
+## Phase P3 Decisions
+- **P3-1 (RabbitMQ Topology & Retry Queues):** Declared `gympro.events` and `gympro.dlx` as durable topic exchanges. Configured `q.email` with dead-letter exchange `gympro.dlx` and dead-letter routing to `email.retry.30s`. Dedicated retry queues (`q.email.retry.30s`, `q.email.retry.5m`, `q.email.retry.30m`) dead-letter expired messages back to `gympro.events` under `email.retry.deliver`.
+- **P3-2 (Bounded DLQ Progression):** Message headers track `x-retry-count`. When `x-retry-count >= 3`, messages route to `q.dlq` for manual inspection rather than infinite retry loops.
+- **P3-3 (Outbox Publisher Confirms):** `publish_outbox_batch` uses aio-pika publisher confirms (`confirm_delivery=True`). Rows in `notification_outbox` are marked `sent_at = NOW()` only after broker ACK, preventing lost messages on broker restarts or network hiccups.
+- **P3-4 (Idempotent Consumers):** Workers claim messages via `INSERT INTO processed_messages (message_id, consumer) ON CONFLICT DO NOTHING`. If a duplicate delivery occurs, the worker acknowledges and discards without duplicate side-effects.
+- **P3-5 (Recipient Privacy & Email Logs):** Recipient addresses are always hashed with SHA-256 (`to_hash`) in `email_log`. No raw email address or health information is ever written to logs.
+- **P3-6 (Transactional vs Marketing Suppression):** Transactional emails (verification, reset, security alerts, receipts) bypass unsubscribes and always deliver. Marketing emails check `unsubscribes` table and user `notification_prefs.marketing_opt_in`.
+- **P3-7 (Token Sanitization from Stored Outbox):** After successful email delivery, sensitive authentication links/tokens are purged from `notification_outbox.params` (`params - 'link' - 'token' - 'code'`).
+- **P3-8 (System RLS Context in Workers):** Background workers and the relay run with `set_rls_system(session)` (`app.role = 'SYSTEM'`), allowing safe cross-user notification writes while adhering strictly to PostgreSQL RLS policies.
+
+
