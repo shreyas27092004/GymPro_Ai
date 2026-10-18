@@ -568,7 +568,7 @@ async def activate_admin(
 
     # Successful activation: single use -> HMAC destroyed
     await db.execute(
-        text("UPDATE role_requests SET status = 'APPROVED', decided_at = NOW(), code_hmac = NULL WHERE id = :id"),
+        text("UPDATE role_requests SET status = 'APPROVED', decided_at = NOW(), code_hmac = '0000000000000000000000000000000000000000000000000000000000000000' WHERE id = :id"),
         {"id": req["id"]},
     )
 

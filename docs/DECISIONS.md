@@ -59,4 +59,15 @@ This document records architectural decisions, resolutions of ambiguities, and i
 - **P3-7 (Token Sanitization from Stored Outbox):** After successful email delivery, sensitive authentication links/tokens are purged from `notification_outbox.params` (`params - 'link' - 'token' - 'code'`).
 - **P3-8 (System RLS Context in Workers):** Background workers and the relay run with `set_rls_system(session)` (`app.role = 'SYSTEM'`), allowing safe cross-user notification writes while adhering strictly to PostgreSQL RLS policies.
 
+## Phase P4 Decisions
+- **P4-1 (Trainer Application Risk Hints):** Pre-calculated risk hints (`duplicate_phone`, `disposable_email`) are computed during `create_trainer_request` and stored on `trainer_applications` for admin queue visibility without blocking legitimate users automatically.
+- **P4-2 (7-Day Reapplication Cooldown):** When a trainer request is rejected, the user cannot submit another trainer application for 7 days (`REJECTED_WAIT_7_DAYS`).
+- **P4-3 (Admin Code Flow & Invariant: No Admin Approval Path):** System administrators can never approve other admin applications via API (`POST /api/admin/admin-requests/{id}/approve` does not exist and returns 404). Admin activation occurs strictly via one-time HMAC-SHA256 verified code sent to all active admins.
+- **P4-4 (Admin Code Flood Limits & Locking):** At most 3 pending admin requests may exist system-wide at any time (`TOO_MANY_PENDING_ADMIN_REQUESTS`), and at most 1 request per 24 hours per email (`ONE_REQUEST_PER_DAY`). Submitting 5 wrong codes permanently cancels the request and expires the account (`REQUEST_LOCKED`).
+- **P4-5 (Single-Use Hash Destruction):** Upon successful admin code activation, the code HMAC is overwritten with a dummy non-matching hash to satisfy `chk_admin_code` while preventing replay attacks.
+- **P4-6 (First Admin Bootstrap):** Admin sign-up is disabled if no active admin exists (`ADMIN_SIGNUP_UNAVAILABLE`). `python -m app.seed_admin` connects as `gympro_seed` to bootstrap the initial administrator and logs an `ADMIN_SEEDED` audit row.
+- **P4-7 (Cooling-off Protection):** Newly activated admins receive a 24-hour cooling-off window (`cooling_off_until = NOW() + 24 hours`). `require_not_cooling_off` blocks restricted operations (`staff/invites`, `trainer-requests/{id}/decision`, `broadcasts`) during this window.
+- **P4-8 (Staff Trainer Invites):** Decision 16 is enforced: Admin invites are strictly prohibited (`ADMIN_INVITES_DISABLED`), while trainer invites generate a 7-day token. Accepting a trainer invite inserts a pre-approved `role_requests` row (`decided_by = inviter`) within the same transaction to satisfy the `guard_role_change()` trigger.
+
+
 

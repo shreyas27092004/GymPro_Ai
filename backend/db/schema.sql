@@ -714,4 +714,6 @@ REVOKE DELETE ON payments, payment_events FROM gympro_app;
 -- gympro_seed : INSERT/UPDATE on users only, used by `python -m app.seed_admin`
 GRANT SELECT ON v_class_occupancy TO gympro_analytics;
 GRANT SELECT, INSERT, UPDATE ON users TO gympro_seed;
+GRANT INSERT ON audit_log TO gympro_seed;
+GRANT USAGE, SELECT ON SEQUENCE audit_log_id_seq TO gympro_seed;
 ALTER ROLE gympro_analytics SET statement_timeout = '5s';

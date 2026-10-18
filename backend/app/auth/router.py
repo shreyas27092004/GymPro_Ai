@@ -1,6 +1,7 @@
 # app/auth/router.py
 from typing import Any
 from fastapi import APIRouter, Cookie, Depends, Request, Response, status
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from ..db import get_db
 from .deps import SessionContext, get_session
@@ -151,3 +152,30 @@ async def api_activate_admin(
 async def api_me(s: SessionContext = Depends(get_session)) -> dict[str, Any]:
     """Return caller's role, status, plan, consent, and profile metadata."""
     return s.public()
+
+
+from .roles import accept_staff_invite
+
+
+class AcceptInviteBody(BaseModel):
+    token: str
+    password: str = Field(min_length=10, max_length=72)
+    full_name: str
+    phone: str | None = None
+
+
+@router.post("/accept-invite", status_code=status.HTTP_200_OK)
+async def api_accept_invite(
+    body: AcceptInviteBody,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    res = await accept_staff_invite(
+        db,
+        raw_token=body.token,
+        password=body.password,
+        full_name=body.full_name,
+        phone=body.phone,
+    )
+    await db.commit()
+    return res
+

@@ -108,6 +108,12 @@ cd backend
 .\venv\Scripts\pytest.exe tests/messaging -q
 ```
 
+Run Phase P4 role requests & security gate tests:
+```powershell
+cd backend
+.\venv\Scripts\pytest.exe tests/roles -q
+```
+
 Run frontend build & tests:
 ```powershell
 cd frontend
