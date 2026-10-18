@@ -1,6 +1,7 @@
 # app/tools/registry.py
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Type
+import uuid
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from ..auth.deps import SessionContext
@@ -125,6 +126,8 @@ class RunContext:
     agent_handoffs: dict[str, dict[str, Any]] = field(default_factory=dict)
     tokens_used: int = 0
     now_iso: str | None = None
+    run_id: uuid.UUID = field(default_factory=uuid.uuid4)
+    trace_id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
     def handoff_projected_plan(self) -> str | None:
         """Returns projected plan code if validated during prior bundle steps."""

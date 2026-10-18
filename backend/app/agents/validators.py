@@ -82,6 +82,10 @@ def validate_envelope(agent: str, env: Envelope, ctx: Any) -> None:
         _validate_wellness(env, ctx)
     elif agent_upper == "NUTRITION":
         _validate_nutrition(env, ctx)
+    elif agent_upper == "COMMS":
+        _validate_comms(env, ctx)
+    elif agent_upper == "SUPPORT":
+        _validate_support(env, ctx)
 
 
 def _validate_schedule(env: Envelope, ctx: Any) -> None:
@@ -206,3 +210,26 @@ def _validate_nutrition(env: Envelope, ctx: Any) -> None:
                 diff_pct = abs(meal_sum - daily_kcal) / daily_kcal
                 if diff_pct > 0.03:
                     raise ValueError(f"NUTRITION: Meal kcal sum ({meal_sum}) differs from daily calories ({daily_kcal}) by > 3%")
+
+
+BLAME_WORDS = re.compile(r"\b(fault|blame|incompetent|negligent|guilty|liable|fired)\b", re.I)
+
+
+def _validate_comms(env: Envelope, ctx: Any) -> None:
+    data = env.data if isinstance(env.data, dict) else env.data.model_dump() if hasattr(env.data, "model_dump") else {}
+    to_masked = data.get("to_masked")
+    session = getattr(ctx, "session", None)
+    if to_masked and session and hasattr(session, "account_email") and session.account_email:
+        user_email = session.account_email
+        parts = user_email.split("@")
+        expected_domain = parts[1].lower() if len(parts) > 1 else ""
+        if not to_masked.lower().endswith(f"@{expected_domain}"):
+            raise ValueError(f"COMMS: recipient must be the account email, got {to_masked}")
+
+
+def _validate_support(env: Envelope, ctx: Any) -> None:
+    data = env.data if isinstance(env.data, dict) else env.data.model_dump() if hasattr(env.data, "model_dump") else {}
+    summary = data.get("neutral_summary")
+    if summary and BLAME_WORDS.search(summary):
+        raise ValueError("SUPPORT: summary must be neutral, contains blame words")
+

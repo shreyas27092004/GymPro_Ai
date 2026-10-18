@@ -264,7 +264,13 @@ async def propose_booking(args: ProposeBookingArgs, ctx: RunContext) -> dict[str
         {"cid": args.class_id},
     )
     cls = cls_res.mappings().one_or_none()
-    if not cls or cls["status"] != "SCHEDULED" or cls["start_time"] <= datetime.now(timezone.utc):
+    now = datetime.fromisoformat(ctx.now_iso) if ctx.now_iso else datetime.now(timezone.utc)
+    st = cls["start_time"] if cls else None
+    if st and st.tzinfo is None and now.tzinfo is not None:
+        st = st.replace(tzinfo=timezone.utc)
+    elif st and st.tzinfo is not None and now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    if not cls or cls["status"] != "SCHEDULED" or st <= now:
         return {"ok": False, "error": "CLASS_UNAVAILABLE"}
 
     if cls["booked_count"] >= cls["capacity"]:

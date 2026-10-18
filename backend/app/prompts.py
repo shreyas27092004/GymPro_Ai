@@ -56,14 +56,20 @@ def load_prompt(agent: str, ctx: Any = None) -> Prompt:
     prompts_dir = get_prompts_dir()
     base_policy_file = prompts_dir / "base_policy.md"
     agent_file = prompts_dir / "agents" / f"{agent.lower()}.md"
+    supervisor_file = prompts_dir / f"{agent.lower()}.md"
 
-    if not base_policy_file.exists():
-        raise FileNotFoundError(f"Base policy not found at {base_policy_file}")
-    if not agent_file.exists():
-        raise FileNotFoundError(f"Agent prompt not found at {agent_file}")
-
-    _, base_body = parse_front_matter(base_policy_file.read_text(encoding="utf-8"))
-    agent_meta, agent_body = parse_front_matter(agent_file.read_text(encoding="utf-8"))
+    if agent_file.exists():
+        if not base_policy_file.exists():
+            raise FileNotFoundError(f"Base policy not found at {base_policy_file}")
+        _, base_body = parse_front_matter(base_policy_file.read_text(encoding="utf-8"))
+        agent_meta, agent_body = parse_front_matter(agent_file.read_text(encoding="utf-8"))
+        has_base = True
+    elif supervisor_file.exists():
+        base_body = ""
+        agent_meta, agent_body = parse_front_matter(supervisor_file.read_text(encoding="utf-8"))
+        has_base = False
+    else:
+        raise FileNotFoundError(f"Prompt file not found for agent '{agent}' at {agent_file} or {supervisor_file}")
 
     # Runtime variables
     now_iso = getattr(ctx, "now_iso", None) if ctx else None

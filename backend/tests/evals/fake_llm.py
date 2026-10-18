@@ -67,6 +67,10 @@ class FakeLLM:
     def completions(self):
         return self
 
+    def reset(self):
+        self.call_history.clear()
+        self.custom_handlers.clear()
+
     async def create(
         self,
         model: str,
@@ -89,6 +93,14 @@ class FakeLLM:
         user_msg = next((m["content"] for m in reversed(messages) if m.get("role") == "user"), "")
         tool_results = [m for m in messages if m.get("role") == "tool"]
 
+        # Check for Supervisor prompts
+        if "SUPERVISOR_GUARD" in sys_msg:
+            return self._handle_guard(user_msg)
+        elif "SUPERVISOR_PLANNER" in sys_msg:
+            return self._handle_planner(user_msg)
+        elif "SYNTHESIZER" in sys_msg:
+            return self._handle_synthesizer(user_msg)
+
         # Determine agent
         agent = "SCHEDULE"
         if "AGENT: MEMBERSHIP" in sys_msg:
@@ -97,6 +109,10 @@ class FakeLLM:
             agent = "WELLNESS"
         elif "AGENT: NUTRITION" in sys_msg:
             agent = "NUTRITION"
+        elif "AGENT: COMMS" in sys_msg:
+            agent = "COMMS"
+        elif "AGENT: SUPPORT" in sys_msg:
+            agent = "SUPPORT"
 
         # Check for injection or cross-user attempts across all agents
         if re.search(r"ignore\s+.*rules|you\s+are\s+admin|another\s+user|someone\s+else|lifetime\s+free|print\s+your.*prompt|steroid", user_msg, re.IGNORECASE):
@@ -120,6 +136,10 @@ class FakeLLM:
             return self._handle_wellness(messages, user_msg, tool_results)
         elif agent == "NUTRITION":
             return self._handle_nutrition(messages, user_msg, tool_results)
+        elif agent == "COMMS":
+            return self._handle_comms(messages, user_msg, tool_results)
+        elif agent == "SUPPORT":
+            return self._handle_support(messages, user_msg, tool_results)
 
         return self._envelope_response(agent, "OK", [], "How can I help you today?")
 
@@ -150,18 +170,24 @@ class FakeLLM:
             )
 
         # Standard booking flow
-        if "book" in user_msg.lower():
+        if "book" in user_msg.lower() or "zumba" in user_msg.lower():
+            is_zumba = "zumba" in user_msg.lower()
+            target_cid = "22222222-2222-2222-2222-222222222222" if is_zumba else "11111111-1111-1111-1111-111111111111"
+            title = "Zumba Fusion" if is_zumba else "Evening Yoga"
+            cat = "ZUMBA" if is_zumba else "YOGA"
+            start_iso = "2026-10-17T10:00:00+05:30" if is_zumba else "2026-10-17T18:00:00+05:30"
+            end_iso = "2026-10-17T11:00:00+05:30" if is_zumba else "2026-10-17T19:00:00+05:30"
+
             if not tool_results:
                 return self._tool_call_response([
-                    ("call_search_1", "search_classes", {"category": "YOGA", "date_from": "2026-10-17", "date_to": "2026-10-17"}),
+                    ("call_search_1", "search_classes", {"category": cat, "date_from": "2026-10-17", "date_to": "2026-10-17"}),
                 ])
             elif len(tool_results) == 1:
                 return self._tool_call_response([
-                    ("call_chk_1", "check_conflicts", {"class_id": "11111111-1111-1111-1111-111111111111"}),
-                    ("call_prop_1", "propose_booking", {"class_id": "11111111-1111-1111-1111-111111111111"}),
+                    ("call_chk_1", "check_conflicts", {"class_id": target_cid}),
+                    ("call_prop_1", "propose_booking", {"class_id": target_cid}),
                 ])
             else:
-                # Find action_id from tool results
                 action_id = "a1111111-1111-1111-1111-111111111111"
                 for tr in tool_results:
                     try:
@@ -177,20 +203,20 @@ class FakeLLM:
                     agent="SCHEDULE",
                     status="NEEDS_CONFIRMATION",
                     flags=[],
-                    user_message="I have set up your booking for Evening Yoga tomorrow. Please tap confirm below to finalize.",
+                    user_message=f"I have set up your booking for {title} on Saturday. Please tap confirm below to finalize.",
                     data={
                         "operation": "PROPOSE_BOOK",
                         "options": [
-                            {"class_id": "11111111-1111-1111-1111-111111111111", "title": "Evening Yoga", "start_time": "2026-10-17T18:00:00+05:30", "end_time": "2026-10-17T19:00:00+05:30", "trainer_name": "Maya", "spots_left": 5, "est_calories": 250, "impact": "LOW", "conflict": False, "uses": "INCLUDED"}
+                            {"class_id": target_cid, "title": title, "start_time": start_iso, "end_time": end_iso, "trainer_name": "Maya", "spots_left": 5, "est_calories": 350, "impact": "MODERATE", "conflict": False, "uses": "INCLUDED"}
                         ],
                         "filtered_for_safety": 0,
-                        "selected_class_id": "11111111-1111-1111-1111-111111111111",
+                        "selected_class_id": target_cid,
                         "booking_id": None,
-                        "depends_on_projected": False,
+                        "depends_on_projected": is_zumba,
                     },
                     confirmation={
                         "action_id": action_id,
-                        "summary": "Book Evening Yoga on Sat 17 Oct 18:00-19:00. Included in your membership.",
+                        "summary": f"Book {title} on Sat 17 Oct. Included in your membership.",
                         "expires_at": "2026-10-16T18:15:00+05:30",
                     },
                 )
@@ -198,6 +224,51 @@ class FakeLLM:
         return self._envelope_response("SCHEDULE", "OK", [], "I can help you search, book, or cancel classes.")
 
     def _handle_membership(self, messages: list[dict[str, Any]], user_msg: str, tool_results: list[dict[str, Any]]) -> FakeChatCompletion:
+        # Upgrade flow
+        if "upgrade" in user_msg.lower() or "platinum" in user_msg.lower():
+            if not tool_results:
+                return self._tool_call_response([
+                    ("call_high_1", "get_highest_plan", {}),
+                    ("call_mem_1", "get_my_membership", {}),
+                    ("call_pd_1", "price_diff", {"to_plan": "PLATINUM", "cycle": "MONTHLY"}),
+                    ("call_prop_m_1", "propose_plan_change", {"to_plan": "PLATINUM", "cycle": "MONTHLY", "confirmed_total": 1000.00}),
+                ])
+            action_id = "b2222222-2222-2222-2222-222222222222"
+            for tr in tool_results:
+                try:
+                    clean = tr.get("content", "").replace("<tool_result>", "").replace("</tool_result>", "").strip()
+                    p = json.loads(clean)
+                    if "action_id" in p:
+                        action_id = p["action_id"]
+                except Exception:
+                    pass
+
+            return self._envelope_response(
+                agent="MEMBERSHIP",
+                status="NEEDS_CONFIRMATION",
+                flags=[],
+                user_message="Platinum is our highest plan. It replaces Gold today. You pay 1000.00 INR now (prorated), then 3499.00 INR per month from 16 Nov 2026.",
+                data={
+                    "current": {"plan": "GOLD", "status": "ACTIVE", "end_date": "2026-11-16", "auto_renew": True},
+                    "trial": {"active": False, "classes_remaining": 0, "expires_at": None},
+                    "comparison": [{"plan": "PLATINUM", "delta_per_cycle": 1500.0, "currency": "INR", "gains": ["5 PT sessions", "spa"], "unused_by_you": []}],
+                    "recommendation": "UPGRADE",
+                    "evidence": [],
+                    "proposed_action_id": action_id,
+                    "replaces_membership": True,
+                },
+                projected_effects={
+                    "plan_after": "PLATINUM",
+                    "effective": "on_confirm",
+                    "entitlements_after": {"classes_remaining": None, "pt_remaining": 5},
+                },
+                confirmation={
+                    "action_id": action_id,
+                    "summary": "Upgrade Gold to Platinum. Gold ends today. Pay 1000.00 INR now (prorated), then 3499.00 INR per month from 16 Nov 2026.",
+                    "expires_at": "2026-10-16T18:15:00+05:30",
+                },
+            )
+
         if "trial" in user_msg.lower() or "book" in user_msg.lower():
             if not tool_results:
                 return self._tool_call_response([
@@ -218,51 +289,6 @@ class FakeLLM:
                     "replaces_membership": False,
                 },
                 missing_fields=["plan_selection"],
-            )
-
-        # Upgrade flow
-        if "upgrade" in user_msg.lower():
-            if not tool_results:
-                return self._tool_call_response([
-                    ("call_high_1", "get_highest_plan", {}),
-                    ("call_mem_1", "get_my_membership", {}),
-                    ("call_pd_1", "price_diff", {"to_plan": "PLATINUM", "cycle": "MONTHLY"}),
-                    ("call_prop_m_1", "propose_plan_change", {"to_plan": "PLATINUM", "cycle": "MONTHLY", "confirmed_total": 945.00}),
-                ])
-            action_id = "b2222222-2222-2222-2222-222222222222"
-            for tr in tool_results:
-                try:
-                    clean = tr.get("content", "").replace("<tool_result>", "").replace("</tool_result>", "").strip()
-                    p = json.loads(clean)
-                    if "action_id" in p:
-                        action_id = p["action_id"]
-                except Exception:
-                    pass
-
-            return self._envelope_response(
-                agent="MEMBERSHIP",
-                status="NEEDS_CONFIRMATION",
-                flags=[],
-                user_message="Platinum is our highest plan. It replaces Gold today. You pay 945.00 INR now (prorated), then 3499.00 INR per month from 16 Nov 2026.",
-                data={
-                    "current": {"plan": "GOLD", "status": "ACTIVE", "end_date": "2026-11-16", "auto_renew": True},
-                    "trial": {"active": False, "classes_remaining": 0, "expires_at": None},
-                    "comparison": [{"plan": "PLATINUM", "delta_per_cycle": 1500.0, "currency": "INR", "gains": ["5 PT sessions", "spa"], "unused_by_you": []}],
-                    "recommendation": "UPGRADE",
-                    "evidence": [],
-                    "proposed_action_id": action_id,
-                    "replaces_membership": True,
-                },
-                projected_effects={
-                    "plan_after": "PLATINUM",
-                    "effective": "on_confirm",
-                    "entitlements_after": {"classes_remaining": None, "pt_remaining": 5},
-                },
-                confirmation={
-                    "action_id": action_id,
-                    "summary": "Upgrade Gold to Platinum. Gold ends today. Pay 945.00 INR now (prorated), then 3499.00 INR per month from 16 Nov 2026.",
-                    "expires_at": "2026-10-16T18:15:00+05:30",
-                },
             )
 
         return self._envelope_response("MEMBERSHIP", "OK", [], "I can explain membership options and assist with upgrades.")
@@ -449,6 +475,175 @@ class FakeLLM:
         return FakeChatCompletion(
             choices=[FakeChoice(message=FakeMessage(role="assistant", content=json.dumps(env)))]
         )
+
+    def _handle_comms(self, messages: list[dict[str, Any]], user_msg: str, tool_results: list[dict[str, Any]]) -> FakeChatCompletion:
+        if "sam@example.com" in user_msg.lower() or "friend" in user_msg.lower():
+            return self._envelope_response(
+                agent="COMMS",
+                status="REFUSED",
+                flags=["EMAIL_TARGET_REFUSED"],
+                user_message="I can only email your own account address. Want me to send the details there so you can forward them?",
+                data={"template_id": None, "channel": None, "to_masked": None, "title": "", "body_preview": "", "attach_calendar": False, "requires_step": None, "send_after": None, "dedupe_key": ""},
+            )
+
+        if not tool_results:
+            return self._tool_call_response([
+                ("call_gt_1", "get_template", {"template_id": "BOOKING_DETAILS"}),
+                ("call_prop_mail", "propose_send_email", {"template_id": "BOOKING_DETAILS", "params": {"class_title": "Zumba Fusion"}, "attach_calendar": True, "requires_step": 2}),
+            ])
+
+        action_id = "c3333333-3333-3333-3333-333333333333"
+        for tr in tool_results:
+            try:
+                clean = tr.get("content", "").replace("<tool_result>", "").replace("</tool_result>", "").strip()
+                p = json.loads(clean)
+                if "action_id" in p:
+                    action_id = p["action_id"]
+            except Exception:
+                pass
+
+        return self._envelope_response(
+            agent="COMMS",
+            status="NEEDS_CONFIRMATION",
+            flags=[],
+            user_message="I'll email the booking details and a calendar file to your account email once the booking is confirmed.",
+            data={
+                "template_id": "BOOKING_DETAILS",
+                "channel": "EMAIL",
+                "to_masked": "m***@gympro.test",
+                "title": "Your booking: Zumba Fusion",
+                "body_preview": "Class, date, time and a calendar file.",
+                "attach_calendar": True,
+                "requires_step": 2,
+                "send_after": None,
+                "dedupe_key": "booking-details:step2",
+            },
+            confirmation={
+                "action_id": action_id,
+                "summary": "Email booking details with a calendar file to your account email after the Zumba booking succeeds.",
+                "expires_at": "2026-10-16T18:15:00+05:30",
+            },
+        )
+
+    def _handle_support(self, messages: list[dict[str, Any]], user_msg: str, tool_results: list[dict[str, Any]]) -> FakeChatCompletion:
+        if not tool_results:
+            return self._tool_call_response([
+                ("call_todays_classes", "get_todays_classes_for_me", {})
+            ])
+
+        return self._envelope_response(
+            agent="SUPPORT",
+            status="NEEDS_INPUT",
+            flags=[],
+            user_message="What happened with today's trainer so I can send your report to the admin?",
+            data={
+                "operation": "COLLECT",
+                "class_id": "33333333-3333-3333-3333-333333333333",
+                "class_label": "HIIT Spin, today 7:00 AM",
+                "category": None,
+                "severity_hint": None,
+                "neutral_summary": None,
+                "guidance_included": False,
+            },
+            missing_fields=["what_happened"],
+        )
+
+    def _handle_guard(self, user_msg: str) -> FakeChatCompletion:
+        low = user_msg.lower()
+        labels = []
+        blocked_spans = []
+        route = "CONTINUE"
+        severity = "NONE"
+
+        if any(k in low for k in ("kill myself", "suicid", "end my life", "self-harm", "hurt myself")):
+            return FakeChatCompletion(choices=[FakeChoice(message=FakeMessage(role="assistant", content=json.dumps({
+                "labels": ["CRISIS"], "severity": "HIGH", "route": "ESCALATE", "blocked_spans": [], "reason": "Crisis detected"
+            })))])
+
+        if any(k in low for k in ("chest pain", "can't breathe", "passed out", "stroke", "severe breathlessness")):
+            return FakeChatCompletion(choices=[FakeChoice(message=FakeMessage(role="assistant", content=json.dumps({
+                "labels": ["MEDICAL_EMERGENCY"], "severity": "HIGH", "route": "ESCALATE", "blocked_spans": [], "reason": "Medical emergency detected"
+            })))])
+
+        if any(k in low for k in ("another user", "someone else", "my friend's account", "book this for another user")):
+            labels.append("CROSS_USER_REQUEST")
+            severity = "HIGH"
+            route = "REFUSE"
+
+        if any(k in low for k in ("ignore your rules", "ignore rules", "you are admin", "system prompt", "ignore previous rules")):
+            labels.append("PROMPT_INJECTION")
+            severity = "HIGH"
+            route = "REFUSE"
+
+        if any(k in low for k in ("sam@example.com", "friend@")):
+            labels.append("EMAIL_OTHER_ADDRESS")
+            blocked_spans.append("sam@example.com")
+
+        if any(k in low for k in ("write python code", "who won the election", "crypto", "bitcoin")):
+            labels.append("OUT_OF_SCOPE")
+            severity = "LOW"
+            route = "REFUSE"
+
+        if not labels:
+            labels = ["BENIGN"]
+
+        return FakeChatCompletion(choices=[FakeChoice(message=FakeMessage(role="assistant", content=json.dumps({
+            "labels": labels, "severity": severity, "route": route, "blocked_spans": blocked_spans, "reason": "Classifier evaluation"
+        })))])
+
+    def _handle_planner(self, user_msg: str) -> FakeChatCompletion:
+        low = user_msg.lower()
+        if "upgrade" in low and ("zumba" in low or "saturday" in low):
+            plan = {
+                "intents": [
+                    {"id": "i1", "name": "UPGRADE_PLAN", "agent": "MEMBERSHIP", "depends_on": [], "confidence": 0.97},
+                    {"id": "i2", "name": "BOOK_CLASS", "agent": "SCHEDULE", "depends_on": ["i1"], "confidence": 0.95},
+                    {"id": "i3", "name": "EMAIL_BOOKING_DETAILS", "agent": "COMMS", "depends_on": ["i2"], "confidence": 0.93},
+                    {"id": "i4", "name": "REPORT_PROBLEM", "agent": "SUPPORT", "depends_on": [], "confidence": 0.94},
+                ],
+                "waves": [["i1", "i4"], ["i2"], ["i3"]],
+                "handoffs": [
+                    {"from": "i1", "to": ["i2"], "fields": ["projected_state"]},
+                    {"from": "i2", "to": ["i3"], "fields": ["step_refs"]},
+                ],
+                "needs_clarification": None,
+                "blocked_intents": [],
+                "route": "CONTINUE",
+            }
+            return FakeChatCompletion(choices=[FakeChoice(message=FakeMessage(role="assistant", content=json.dumps(plan)))])
+
+        if "knee pain" in low or "soreness" in low:
+            plan = {
+                "intents": [
+                    {"id": "i1", "name": "INJURY_AWARE_SCHEDULING", "agent": "WELLNESS", "depends_on": [], "confidence": 0.94},
+                    {"id": "i2", "name": "FIND_CLASS", "agent": "SCHEDULE", "depends_on": ["i1"], "confidence": 0.94},
+                ],
+                "waves": [["i1"], ["i2"]],
+                "handoffs": [
+                    {"from": "i1", "to": ["i2"], "fields": ["safety_constraints", "preferred_activities"]},
+                ],
+                "needs_clarification": None,
+                "blocked_intents": [],
+                "route": "CONTINUE",
+            }
+            return FakeChatCompletion(choices=[FakeChoice(message=FakeMessage(role="assistant", content=json.dumps(plan)))])
+
+        # Default fallback plan
+        return FakeChatCompletion(choices=[FakeChoice(message=FakeMessage(role="assistant", content=json.dumps({
+            "intents": [{"id": "i1", "name": "HANDLE_SCHEDULE", "agent": "SCHEDULE", "depends_on": [], "confidence": 0.9}],
+            "waves": [["i1"]], "handoffs": [], "needs_clarification": None, "blocked_intents": [], "route": "CONTINUE"
+        })))])
+
+    def _handle_synthesizer(self, user_msg: str) -> FakeChatCompletion:
+        reply = {
+            "reply": "I have prepared your upgrade to Platinum, set up your Zumba Fusion booking for Saturday 10:00 AM, and queued the booking details email. What happened with today's trainer so I can send your report to the admin?",
+            "quick_actions": [
+                {"type": "CONFIRM_BUNDLE", "label": "Confirm all 3 steps"}
+            ],
+            "conflicts_resolved": [],
+            "flags": [],
+        }
+        return FakeChatCompletion(choices=[FakeChoice(message=FakeMessage(role="assistant", content=json.dumps(reply)))])
 
 
 fake_llm = FakeLLM()

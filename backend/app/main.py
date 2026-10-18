@@ -5,6 +5,7 @@ from .auth.admin_router import admin_router
 from .auth.router import router as auth_router
 from .entitlements.router import router as entitlements_router
 from .executor import executor_router
+from .orchestrator.router import router as orchestrator_router
 from .payments import router as payments_router
 from .settings import settings
 
@@ -46,6 +47,9 @@ app.include_router(executor_router, prefix="/api")
 
 # Mount payments router under /api
 app.include_router(payments_router, prefix="/api")
+
+# Mount agent chat orchestrator router under /api
+app.include_router(orchestrator_router, prefix="/api")
 
 
 @app.get("/health", status_code=status.HTTP_200_OK, tags=["System"])

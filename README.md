@@ -144,6 +144,12 @@ cd backend
 .\venv\Scripts\pytest.exe tests/evals -k "schedule or membership or wellness or nutrition" -q
 ```
 
+Run Phase P9 supervisor & flagship scenario gate tests:
+```powershell
+cd backend
+.\venv\Scripts\pytest.exe tests/evals -k "guard or planner or bundle or flagship" -q
+```
+
 Run frontend build & tests:
 ```powershell
 cd frontend

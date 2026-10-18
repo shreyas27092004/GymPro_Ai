@@ -37,5 +37,21 @@ class InMemoryRateLimiter:
 limiter = InMemoryRateLimiter()
 
 
+from fastapi import HTTPException, Request, status
+
+
 def check_rate_limit(key: str, limit: int, window_s: float) -> bool:
     return limiter.check(key, limit, window_s)
+
+
+def rate_limit(tag: str, limit: int, window_s: float):
+    async def dependency(request: Request):
+        client_ip = request.client.host if request.client else "unknown"
+        key = f"{tag}:{client_ip}"
+        if not check_rate_limit(key, limit, window_s):
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Rate limit exceeded.",
+            )
+    return dependency
+
