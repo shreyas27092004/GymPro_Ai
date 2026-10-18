@@ -1,0 +1,2 @@
+-- backend/db/schema.sql
+-- Canonical database schema (implemented in Phase P1)
