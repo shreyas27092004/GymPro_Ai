@@ -126,6 +126,12 @@ cd backend
 .\venv\Scripts\pytest.exe tests/executor -q
 ```
 
+Run Phase P6b payments gate tests:
+```powershell
+cd backend
+.\venv\Scripts\pytest.exe tests/payments -q
+```
+
 Run frontend build & tests:
 ```powershell
 cd frontend

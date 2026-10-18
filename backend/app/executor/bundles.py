@@ -42,11 +42,18 @@ async def step_results(db: AsyncSession, bundle_id: uuid.UUID) -> list[dict[str,
 
 async def stored_results(db: AsyncSession, bundle_row: dict[str, Any]) -> dict[str, Any]:
     steps = await step_results(db, bundle_row["id"])
-    return {
+    out: dict[str, Any] = {
         "status": bundle_row["status"],
         "bundle_id": str(bundle_row["id"]),
         "steps": steps,
     }
+    if bundle_row["status"] == "AWAITING_PAYMENT":
+        for st in steps:
+            res_obj = st.get("result") or {}
+            if st.get("status") == "AWAITING_PAYMENT" and isinstance(res_obj, dict) and res_obj.get("awaiting"):
+                out["payment"] = res_obj["awaiting"]
+                break
+    return out
 
 
 async def run_bundle_steps(db: AsyncSession, s: SessionContext, bundle_id: uuid.UUID) -> dict[str, Any]:

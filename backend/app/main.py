@@ -5,6 +5,7 @@ from .auth.admin_router import admin_router
 from .auth.router import router as auth_router
 from .entitlements.router import router as entitlements_router
 from .executor import executor_router
+from .payments import router as payments_router
 from .settings import settings
 
 app = FastAPI(
@@ -12,6 +13,12 @@ app = FastAPI(
     description="GymPro AI Backend API",
     version="0.1.0",
 )
+
+# Startup verification
+@app.on_event("startup")
+async def startup_check():
+    if settings.env == "production" and settings.payments_mode == "mock":
+        raise RuntimeError("PAYMENTS_MODE=mock is not allowed when ENV=production")
 
 # CORS middleware
 app.add_middleware(
@@ -36,6 +43,9 @@ app.include_router(entitlements_router, prefix="/api")
 
 # Mount deterministic executor router under /api
 app.include_router(executor_router, prefix="/api")
+
+# Mount payments router under /api
+app.include_router(payments_router, prefix="/api")
 
 
 @app.get("/health", status_code=status.HTTP_200_OK, tags=["System"])

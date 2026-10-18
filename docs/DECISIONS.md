@@ -84,5 +84,13 @@ This document records architectural decisions, resolutions of ambiguities, and i
 - **P6-5 (Price Fluctuation Guard):** Plan changes compare the user's `confirmed_total` against the live recalculated `quote.prorated_today`. Deltas greater than `0.01` INR trigger immediate rejection with `PRICE_CHANGED` without charging or activating plans.
 - **P6-6 (Foreign Key Order on Plan Replacement):** In `activate_plan`, old active membership is marked `REPLACED` before inserting the new membership row, which in turn is followed by linking `old.replaced_by = new.id`, maintaining both foreign key integrity and `uq_one_active_membership` constraint satisfaction.
 
+## Phase P6b Decisions
+- **P6b-1 (Payment Provider Protocol & Test Fake):** `PaymentProvider` abstract protocol encapsulates order creation, signature verification, and payment listing. `RazorpayProvider` connects to Razorpay REST APIs, `MockProvider` simulates instant paid confirmations for local testing, and `FakeProvider` provides deterministic signature generation and order capture simulation for hermetic unit testing without network dependencies.
+- **P6b-2 (Paise Minor Unit Exact Arithmetic):** All monetary amounts are quantized to integer paise (`ROUND_HALF_UP`) with `to_minor()`. No float calculations or drifting rounding errors touch financial tables.
+- **P6b-3 (Single Authority for Paid Activation):** `finalize_paid` is the unique entrypoint for converting payment capture into active memberships. Idempotent across callers (`verify`, `webhook`, `reconciler`) using row locking (`FOR UPDATE`) on `payments`. If payment arrives late, expired, or after plan conflict, state transitions to `NEEDS_REVIEW` with an admin notification, never activating silently.
+- **P6b-4 (Non-Terminal Payment Failure & Attempt Tracking):** Webhook events for `payment.failed` increment the attempt counter on the open payment row without terminating it, allowing user retry within the Checkout modal. Terminal failures only occur upon order expiry, user cancellation, or reconciler expiration.
+- **P6b-5 (Raw Bytes Webhook HMAC & Event Deduplication):** `POST /api/payments/razorpay/webhook` strictly reads raw request body bytes for SHA-256 HMAC verification before any JSON deserialization. Unique `X-Razorpay-Event-Id` headers are inserted into `payment_events` with `ON CONFLICT DO NOTHING`, discarding duplicate deliveries safely.
+- **P6b-6 (Production Guard):** Server refuses to start if `ENV=production` and `PAYMENTS_MODE=mock` (verified at Pydantic settings initialization and FastAPI startup).
+
 
 

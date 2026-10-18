@@ -56,7 +56,7 @@ async def confirm_action(
                 detail="This action belongs to a bundle; confirm the bundle",
             )
 
-        if action.status == "EXECUTED":
+        if action.status in ("EXECUTED", "AWAITING_PAYMENT"):
             return action.result  # Idempotent replay
 
         now = datetime.now(timezone.utc)
