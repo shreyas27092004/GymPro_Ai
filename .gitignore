@@ -61,6 +61,11 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 
-# Binaries & local tools
+# Binaries, local tools & mail outbox
+tools/
 /tools/
 *.exe
+mail_outbox/
+*.dump
+*.sql.tar
+*.bak

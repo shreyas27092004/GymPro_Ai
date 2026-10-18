@@ -4,6 +4,9 @@ from .settings import settings
 
 
 def build_llm():
+    if settings.llm_provider == "fake":
+        from .llm_fake import fake_llm
+        return fake_llm
     if settings.llm_provider == "azure":
         return AsyncAzureOpenAI(
             api_key=settings.llm_api_key,

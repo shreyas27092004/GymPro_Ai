@@ -204,4 +204,24 @@ Get-ChildItem ..\docs\runbooks\
 ```
 Security controls strictly enforce all Spec 12.2 invariants. Observability provides structured JSON logs with PII/card/token scrubbing, OpenTelemetry distributed tracing with `X-Trace-Id` propagation, and Prometheus metrics exposition at `/metrics`. Operational runbooks under `docs/runbooks/` document contingency and incident review protocols.
 
+Run Phase P14 Company PC Migration verification (Gate):
+```powershell
+# 1. Run automated prerequisites check (non-destructive)
+powershell -ExecutionPolicy Bypass -File scripts\check_prereqs.ps1
+
+# 2. Run Phase P14 migration test pack
+cd backend
+.\venv\Scripts\pytest.exe tests/migration -v
+
+# 3. Run smoke gate tests (db, auth, messaging)
+.\venv\Scripts\pytest.exe tests/db tests/auth tests/messaging -q
+
+# 4. Verify zero secrets or dumps tracked in git
+git ls-files | Select-String -Pattern "^\.env$|\.pem$|\.key$|venv/|node_modules/|gympro_vector_store/|\.dump$"
+
+# 5. Review Company PC Setup documentation
+Get-Item ..\docs\COMPANY_PC_SETUP.md
+```
+Company PC migration is fully automated. Pinned dependencies (`backend/requirements.txt`), committed lockfiles (`frontend/package-lock.json`), database bootstrap scripts (`backend/db/00_create_databases.sql`), line ending normalization (`.gitattributes`), and automation scripts (`scripts/check_prereqs.ps1`, `scripts/setup_company_pc.ps1`, `scripts/start_all.ps1`, `scripts/reset_dev_db.ps1`, `scripts/dev_smtp_sink.py`) ensure 100% reproducible zero-secret deployment on any enterprise workstation.
+
 

@@ -31,6 +31,8 @@ async def startup_check():
     setup_logging()
     if settings.env == "production" and settings.payments_mode == "mock":
         raise RuntimeError("PAYMENTS_MODE=mock is not allowed when ENV=production")
+    if settings.env == "production" and settings.llm_provider == "fake":
+        raise RuntimeError("LLM_PROVIDER=fake is not allowed when ENV=production")
 
 
 class ObservabilityMiddleware(BaseHTTPMiddleware):

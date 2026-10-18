@@ -22,9 +22,9 @@ class Settings(BaseSettings):
     token_hmac_secret: str = ""
     frontend_url: str = "http://localhost:5173"  # links in emails come from here, never from Host header
 
-    llm_provider: Literal["azure", "openai", "ollama"] = "ollama"
+    llm_provider: Literal["azure", "openai", "ollama", "fake"] = "fake"
     llm_model: str = "gpt-4o"                    # Azure: deployment name; Ollama: e.g. "qwen2.5:14b-instruct"
-    llm_api_key: str = "ollama"
+    llm_api_key: str = "fake"
     llm_base_url: str | None = "http://localhost:11434/v1"
     azure_endpoint: str | None = None
     azure_api_version: str = "2024-10-21"
@@ -55,6 +55,8 @@ class Settings(BaseSettings):
     def model_post_init(self, __context) -> None:
         if self.env == "production" and self.payments_mode == "mock":
             raise RuntimeError("PAYMENTS_MODE=mock is not allowed when ENV=production")
+        if self.env == "production" and self.llm_provider == "fake":
+            raise RuntimeError("LLM_PROVIDER=fake is not allowed when ENV=production")
 
     @property
     def formatted_jwt_private_key(self) -> str:
