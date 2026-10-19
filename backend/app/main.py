@@ -4,6 +4,7 @@ from fastapi import FastAPI, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from .auth.admin_router import admin_router
+from .trainer_router import trainer_router
 from .auth.router import router as auth_router
 from .entitlements.router import router as entitlements_router
 from .executor import executor_router
@@ -76,6 +77,10 @@ app.include_router(auth_router, prefix="/api")
 # Mount admin routers under /api/admin and /admin
 app.include_router(admin_router, prefix="/api/admin")
 app.include_router(admin_router, prefix="/admin")
+
+# Mount trainer routers under /api/trainer and /trainer
+app.include_router(trainer_router, prefix="/api/trainer")
+app.include_router(trainer_router, prefix="/trainer")
 
 # Mount entitlements & member profile router under /api
 app.include_router(entitlements_router, prefix="/api")

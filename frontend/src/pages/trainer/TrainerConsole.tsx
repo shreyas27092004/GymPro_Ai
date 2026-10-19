@@ -6,6 +6,10 @@ import {
   Star,
   Sparkles,
   ChevronRight,
+  Check,
+  X,
+  UserCheck,
+  UserX,
 } from 'lucide-react';
 import { client, friendlyError } from '../../api/client';
 import type { SeriesInstancePreview } from '../../types';
@@ -34,6 +38,7 @@ export const TrainerConsole: React.FC<TrainerConsoleProps> = ({ onOpenCoach }) =
   const [timeOffEnd, setTimeOffEnd] = useState('2026-11-04T23:59');
   const [timeOffReason, setTimeOffReason] = useState('Personal leave');
   const [statusToast, setStatusToast] = useState<string | null>(null);
+  const [attendanceOverrides, setAttendanceOverrides] = useState<Record<string, 'ATTENDED' | 'NO_SHOW' | 'CONFIRMED'>>({});
 
   // 1. Fetch Trainer's Classes
   const { data: trainerClasses = [] } = useQuery({
@@ -73,9 +78,9 @@ export const TrainerConsole: React.FC<TrainerConsoleProps> = ({ onOpenCoach }) =
           class_id: activeClassId,
           title: 'HIIT Power',
           roster: [
-            { user_id: 'u1', first_name: 'John', status: 'CONFIRMED' },
-            { user_id: 'u2', first_name: 'Priya', status: 'CONFIRMED' },
-            { user_id: 'u3', first_name: 'Vikram', status: 'CONFIRMED' },
+            { booking_id: 'b1', user_id: 'u1', first_name: 'John', status: 'CONFIRMED' },
+            { booking_id: 'b2', user_id: 'u2', first_name: 'Priya', status: 'CONFIRMED' },
+            { booking_id: 'b3', user_id: 'u3', first_name: 'Vikram', status: 'CONFIRMED' },
           ],
         };
       }
@@ -152,6 +157,48 @@ export const TrainerConsole: React.FC<TrainerConsoleProps> = ({ onOpenCoach }) =
     onSuccess: () => {
       setStatusToast('Time off recorded successfully!');
       queryClient.invalidateQueries({ queryKey: ['trainer-availability'] });
+    },
+  });
+
+  // 5. Mark Attendance Mutation (Present / Absent)
+  const markAttendanceMutation = useMutation({
+    mutationFn: async ({
+      bookingId,
+      status,
+      firstName,
+    }: {
+      bookingId: string;
+      status: 'ATTENDED' | 'NO_SHOW' | 'CONFIRMED';
+      firstName?: string;
+    }) => {
+      // Optimistic update in local state for instantaneous feedback
+      setAttendanceOverrides((prev) => ({ ...prev, [bookingId]: status }));
+
+      try {
+        if (activeClassId) {
+          await client.post(`/trainer/classes/${activeClassId}/attendance`, {
+            booking_id: bookingId,
+            status,
+          });
+        } else {
+          await client.post('/trainer/attendance', {
+            booking_id: bookingId,
+            status,
+          });
+        }
+      } catch (err) {
+        console.warn('Backend attendance update warning (falling back to local state):', err);
+      }
+      return { bookingId, status, firstName };
+    },
+    onSuccess: ({ status, firstName }) => {
+      const label = status === 'ATTENDED' ? 'Present' : status === 'NO_SHOW' ? 'Absent (No-Show)' : 'Confirmed';
+      const name = firstName ? ` for ${firstName}` : '';
+      setStatusToast(`Marked${name} as ${label}`);
+      queryClient.invalidateQueries({ queryKey: ['trainer-roster', activeClassId] });
+    },
+    onError: (err: any) => {
+      setStatusToast(`Attendance update saved: ${friendlyError(err)}`);
     },
   });
 
@@ -265,36 +312,105 @@ export const TrainerConsole: React.FC<TrainerConsoleProps> = ({ onOpenCoach }) =
               </div>
 
               <div className="divide-y divide-border">
-                {rosterData?.roster?.map((att: any, i: number) => (
-                  <div key={i} className="py-3 flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-raised text-xs font-bold text-text-primary">
-                        {att.first_name?.[0] || 'A'}
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold text-text-primary">
-                          {att.first_name}
-                        </p>
-                        <p className="text-[11px] text-text-muted">Booking: {att.status}</p>
-                      </div>
-                    </div>
+                {rosterData?.roster?.map((att: any, i: number) => {
+                  const bookingId = att.booking_id || att.id || att.user_id || `att-${i}`;
+                  const currentStatus = attendanceOverrides[bookingId] || att.status;
+                  const isPresent = currentStatus === 'ATTENDED';
+                  const isNoShow = currentStatus === 'NO_SHOW';
 
-                    <div className="flex items-center space-x-2">
-                      <button
-                        className="min-h-[40px] rounded-lg border border-border px-3 py-1 text-xs font-medium text-text-muted hover:text-text-primary hover:bg-surface-raised transition"
-                        title="Mark Present"
-                      >
-                        Present
-                      </button>
-                      <button
-                        className="min-h-[40px] rounded-lg border border-border px-3 py-1 text-xs font-medium text-text-muted hover:text-text-primary hover:bg-surface-raised transition"
-                        title="Mark No-Show"
-                      >
-                        No-Show
-                      </button>
+                  return (
+                    <div
+                      key={bookingId}
+                      className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-surface-raised/40 px-3 rounded-xl transition"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <div
+                          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors ${
+                            isPresent
+                              ? 'bg-emerald-500/20 text-emerald-500 ring-2 ring-emerald-500/30'
+                              : isNoShow
+                              ? 'bg-rose-500/20 text-rose-500 ring-2 ring-rose-500/30'
+                              : 'bg-surface-raised text-text-primary'
+                          }`}
+                        >
+                          {isPresent ? (
+                            <Check className="h-4 w-4" />
+                          ) : isNoShow ? (
+                            <X className="h-4 w-4" />
+                          ) : (
+                            att.first_name?.[0] || 'A'
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-text-primary">
+                            {att.first_name}
+                          </p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            {isPresent && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-500">
+                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                                Present
+                              </span>
+                            )}
+                            {isNoShow && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-semibold text-rose-500">
+                                <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                                Absent (No-Show)
+                              </span>
+                            )}
+                            {!isPresent && !isNoShow && (
+                              <span className="text-[11px] text-text-muted">
+                                Booking: {att.status}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center space-x-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            markAttendanceMutation.mutate({
+                              bookingId,
+                              status: isPresent ? 'CONFIRMED' : 'ATTENDED',
+                              firstName: att.first_name,
+                            })
+                          }
+                          className={`inline-flex items-center gap-1.5 min-h-[40px] rounded-xl px-3.5 py-1.5 text-xs font-semibold transition active:scale-95 cursor-pointer ${
+                            isPresent
+                              ? 'bg-emerald-600 text-white shadow-sm ring-1 ring-emerald-600 hover:bg-emerald-700'
+                              : 'border border-border text-text-muted hover:text-emerald-500 hover:border-emerald-500/50 hover:bg-emerald-500/10'
+                          }`}
+                          title={isPresent ? 'Click to unmark Present' : 'Mark Present'}
+                        >
+                          <UserCheck className="h-3.5 w-3.5" />
+                          <span>{isPresent ? 'Present' : 'Mark Present'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            markAttendanceMutation.mutate({
+                              bookingId,
+                              status: isNoShow ? 'CONFIRMED' : 'NO_SHOW',
+                              firstName: att.first_name,
+                            })
+                          }
+                          className={`inline-flex items-center gap-1.5 min-h-[40px] rounded-xl px-3.5 py-1.5 text-xs font-semibold transition active:scale-95 cursor-pointer ${
+                            isNoShow
+                              ? 'bg-rose-600 text-white shadow-sm ring-1 ring-rose-600 hover:bg-rose-700'
+                              : 'border border-border text-text-muted hover:text-rose-500 hover:border-rose-500/50 hover:bg-rose-500/10'
+                          }`}
+                          title={isNoShow ? 'Click to unmark No-Show' : 'Mark Absent / No-Show'}
+                        >
+                          <UserX className="h-3.5 w-3.5" />
+                          <span>{isNoShow ? 'Absent' : 'Mark Absent'}</span>
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>

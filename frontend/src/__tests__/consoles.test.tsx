@@ -1,5 +1,5 @@
 // src/__tests__/consoles.test.tsx
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemberDashboard } from '../pages/member/MemberDashboard';
@@ -43,6 +43,39 @@ describe('Consoles & Privacy Components', () => {
     expect(screen.getByRole('button', { name: /Recurring Series Creator/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Availability & Time Off/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Member Reviews & Feedback/i })).toBeInTheDocument();
+  });
+
+  it('allows clicking attendee Present and Absent buttons in TrainerConsole', async () => {
+    render(
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <TrainerConsole onOpenCoach={vi.fn()} />
+        </AuthProvider>
+      </QueryClientProvider>
+    );
+
+    // Wait for attendee name to render
+    const johnAttendee = await screen.findByText('John');
+    expect(johnAttendee).toBeInTheDocument();
+
+    // Find the Present button and click it
+    const presentButtons = screen.getAllByRole('button', { name: /Mark Present|Present/i });
+    expect(presentButtons.length).toBeGreaterThan(0);
+    fireEvent.click(presentButtons[0]);
+
+    // John should now be marked Present
+    await waitFor(() => {
+      expect(screen.getByText(/Marked for John as Present/i)).toBeInTheDocument();
+    });
+
+    // Find the Absent button for Priya and click it
+    const absentButtons = screen.getAllByRole('button', { name: /Mark Absent|Absent/i });
+    expect(absentButtons.length).toBeGreaterThan(0);
+    fireEvent.click(absentButtons[1]);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Marked for Priya as Absent/i)).toBeInTheDocument();
+    });
   });
 
   it('renders AdminConsole with KPI catalog and security guarantees', () => {
