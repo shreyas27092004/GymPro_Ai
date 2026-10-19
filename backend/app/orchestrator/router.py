@@ -29,7 +29,7 @@ def get_orchestrator_graph():
 
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=2000)
-    conversation_id: uuid.UUID
+    conversation_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     input_mode: Literal["text", "voice"] = "text"
 
 

@@ -28,10 +28,15 @@ interface GymProCoachProps {
 export const GymProCoach: React.FC<GymProCoachProps> = ({
   isOpen,
   onClose,
-  conversationId = 'default',
+  conversationId,
 }) => {
   const { me } = useAuth();
   const drawerRef = useRef<HTMLDivElement>(null);
+
+  const [activeConvId] = useState<string>(() => {
+    if (conversationId && conversationId !== 'default') return conversationId;
+    return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : '00000000-0000-0000-0000-000000000001';
+  });
 
   // Pending payment state for "Pay now" and "Cancel payment"
   const [pendingPayment, setPendingPayment] = useState<{
@@ -104,7 +109,7 @@ export const GymProCoach: React.FC<GymProCoachProps> = ({
     mutationFn: async (message: string) => {
       const res = await client.post('/agent/chat', {
         message,
-        conversation_id: conversationId,
+        conversation_id: activeConvId,
         input_mode: listening ? 'voice' : 'text',
       });
       return res.data;

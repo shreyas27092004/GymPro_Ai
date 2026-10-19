@@ -163,18 +163,22 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenCoach }) => {
             </div>
           ) : (
             <div className="flex items-center space-x-2">
-              <Link
-                to="/login"
-                className="flex items-center justify-center px-3.5 min-h-[44px] text-sm font-medium text-text-muted hover:text-text-primary transition"
-              >
-                Sign in
-              </Link>
-              <Link
-                to="/register"
-                className="flex items-center justify-center rounded-xl bg-accent hover:bg-accent-hover px-4 min-h-[44px] text-sm font-semibold text-white shadow-sm transition"
-              >
-                Get Started
-              </Link>
+              {location.pathname !== '/login' && (
+                <Link
+                  to="/login"
+                  className="flex items-center justify-center px-3.5 min-h-[44px] text-sm font-medium text-text-muted hover:text-text-primary transition"
+                >
+                  Sign in
+                </Link>
+              )}
+              {location.pathname !== '/register' && (
+                <Link
+                  to="/register"
+                  className="flex items-center justify-center rounded-xl bg-accent hover:bg-accent-hover px-4 min-h-[44px] text-sm font-semibold text-white shadow-sm transition"
+                >
+                  Get Started
+                </Link>
+              )}
             </div>
           )}
         </div>
