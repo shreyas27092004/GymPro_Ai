@@ -13,7 +13,6 @@ import {
 } from 'lucide-react';
 import { client } from '../../api/client';
 import { useAuth, homeFor } from '../../auth/AuthContext';
-import type { UserSession } from '../../types';
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
